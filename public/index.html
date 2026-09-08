@@ -46,9 +46,22 @@
         <p id="model-blurb" class="field-hint"></p>
       </section>
 
+      <!-- Referenzbild-Kategorien werden hier per JS eingefuegt -->
+      <div id="reference-sections"></div>
+
       <section class="field">
-        <label class="field-label" for="prompt">Prompt</label>
-        <textarea id="prompt" rows="6" placeholder="Beschreibe, was entstehen soll…"></textarea>
+        <p id="ref-status" class="ref-status"></p>
+        <button id="ref-clear-all" type="button" class="ref-clear-all">Alle Referenzen leeren</button>
+      </section>
+
+      <section class="field">
+        <label class="field-label" for="prompt-start">Prompt — Startbild</label>
+        <textarea id="prompt-start" rows="4" placeholder="Was soll das Startbild zeigen?"></textarea>
+      </section>
+
+      <section class="field">
+        <label class="field-label" for="prompt-end">Prompt — Endbild <span class="field-label-muted">(optional)</span></label>
+        <textarea id="prompt-end" rows="4" placeholder="Leer lassen, wenn nur ein Bild entstehen soll."></textarea>
       </section>
 
       <section class="field field-row">
@@ -60,15 +73,6 @@
           <label class="field-label" for="resolution">Auflösung</label>
           <select id="resolution"></select>
         </div>
-      </section>
-
-      <section class="field">
-        <label class="field-label">Referenzbilder <span id="ref-limit" class="field-label-muted"></span></label>
-        <div id="dropzone" class="dropzone">
-          <p>Bilder hierher ziehen oder klicken</p>
-          <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp" multiple hidden />
-        </div>
-        <div id="ref-thumbs" class="ref-thumbs"></div>
       </section>
 
       <button id="generate-btn" class="generate-btn">
@@ -83,53 +87,12 @@
     <main class="lightbox">
       <div id="results-grid" class="results-grid"></div>
       <p id="empty-state" class="empty-state">
-        Noch nichts entwickelt. Prompt eingeben, Modell wählen, loslegen.
+        Noch nichts entwickelt. Referenzen befüllen (optional), Prompt eingeben, entwickeln.
       </p>
     </main>
 
   </div>
 </div>
-
-<template id="tpl-card-pending">
-  <div class="card card-pending">
-    <div class="card-media">
-      <div class="developing-fill"></div>
-      <div class="card-media-label">wird entwickelt…</div>
-    </div>
-    <div class="card-meta">
-      <span class="card-model"></span>
-      <span class="card-state"></span>
-    </div>
-    <p class="card-prompt"></p>
-  </div>
-</template>
-
-<template id="tpl-card-done">
-  <div class="card card-done">
-    <div class="card-media">
-      <img class="card-img" alt="" />
-    </div>
-    <div class="card-meta">
-      <span class="card-model"></span>
-      <a class="card-download" download>Herunterladen ↓</a>
-    </div>
-    <p class="card-prompt"></p>
-    <button class="card-use-ref">Als Referenz verwenden</button>
-  </div>
-</template>
-
-<template id="tpl-card-error">
-  <div class="card card-error">
-    <div class="card-media card-media-error">
-      <div class="card-media-label">fehlgeschlagen</div>
-    </div>
-    <div class="card-meta">
-      <span class="card-model"></span>
-    </div>
-    <p class="card-prompt"></p>
-    <p class="card-error-msg"></p>
-  </div>
-</template>
 
 <script src="/app.js"></script>
 </body>
