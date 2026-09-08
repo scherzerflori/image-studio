@@ -484,6 +484,12 @@ function getProjectStyleText() {
 // Prompt aus Referenzbild (Claude)
 // ---------------------------------------------------------------------------
 
+function updateDescribeBtnState() {
+  const hasImage = !!describeImageBase64;
+  const hasIdea = !!$('#describe-idea').value.trim();
+  $('#describe-btn').disabled = !hasImage && !hasIdea;
+}
+
 function wireDescribe() {
   $('#describe-tile').addEventListener('click', () => {
     describeFileInput.value = '';
@@ -501,36 +507,39 @@ function wireDescribe() {
       const img = $('#describe-tile-img');
       img.src = describeImageBase64;
       img.classList.remove('hidden');
-      $('#describe-btn').classList.remove('hidden');
       $('#describe-result').classList.add('hidden');
+      updateDescribeBtnState();
     };
     reader.readAsDataURL(file);
   });
 
+  $('#describe-idea').addEventListener('input', updateDescribeBtnState);
+
   $('#describe-btn').addEventListener('click', async () => {
-    if (!describeImageBase64) return;
     const btn = $('#describe-btn');
     btn.disabled = true;
-    btn.textContent = 'wird analysiert …';
+    btn.textContent = 'wird erstellt …';
     try {
-      const res = await fetch('/api/describe-image', {
+      const res = await fetch('/api/generate-prompt', {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ base64Data: describeImageBase64, styleHint: getProjectStyleText() }),
+        body: JSON.stringify({
+          base64Data: describeImageBase64 || undefined,
+          ideaText: $('#describe-idea').value,
+          styleHint: getProjectStyleText(),
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Beschreibung fehlgeschlagen.');
+      if (!res.ok) throw new Error(data.error || 'Prompt-Erstellung fehlgeschlagen.');
       $('#describe-output').value = data.prompt;
       $('#describe-result').classList.remove('hidden');
       populateUseRefSelect($('#describe-as-ref'));
     } catch (err) {
       console.error(err);
-      $('#describe-output').value = '';
-      $('#describe-result').classList.remove('hidden');
-      alert(err.message || 'Beschreibung fehlgeschlagen.');
+      alert(err.message || 'Prompt-Erstellung fehlgeschlagen.');
     } finally {
-      btn.disabled = false;
       btn.textContent = 'Prompt erstellen';
+      updateDescribeBtnState();
     }
   });
 
@@ -670,6 +679,27 @@ function finishSlotDone(slotRefs, url, entry, role) {
   dl.textContent = '↓ Bild';
   dl.setAttribute('download', '');
   slotRefs.actions.appendChild(dl);
+
+  if (entry && role) {
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'slot-copy';
+    copyBtn.type = 'button';
+    copyBtn.textContent = '⎘ Prompt';
+    copyBtn.addEventListener('click', async () => {
+      const text = role === 'start' ? entry.promptStart : entry.promptEnd;
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        copyBtn.textContent = 'kopiert!';
+      } catch (err) {
+        copyBtn.textContent = 'geht nicht';
+      }
+      setTimeout(() => {
+        copyBtn.textContent = '⎘ Prompt';
+      }, 1500);
+    });
+    slotRefs.actions.appendChild(copyBtn);
+  }
 
   const select = document.createElement('select');
   select.className = 'slot-use-ref';

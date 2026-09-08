@@ -574,6 +574,17 @@ textarea { resize: vertical; line-height: 1.4; }
   color: var(--accent-strong);
 }
 
+.slot-copy {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius);
+  padding: 3px 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.slot-copy:hover { border-color: var(--accent); color: var(--accent); }
+
 .slot-variant-btn {
   background: transparent;
   border: 1px solid var(--border);
