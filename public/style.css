@@ -437,6 +437,28 @@ textarea { resize: vertical; line-height: 1.4; }
   overflow-y: auto;
 }
 
+.lightbox-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.filter-kept-btn {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.filter-kept-btn:hover { border-color: var(--accent); color: var(--accent); }
+.filter-kept-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
 .empty-state {
   color: var(--text-faint);
   font-size: 14px;
@@ -459,7 +481,9 @@ textarea { resize: vertical; line-height: 1.4; }
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  transition: border-color 0.15s;
 }
+.card.card-kept { border-color: var(--accent); }
 
 .card-media-row {
   display: flex;
@@ -529,10 +553,64 @@ textarea { resize: vertical; line-height: 1.4; }
 .slot-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 6px 8px;
 }
+
+.slot-keep {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius);
+  padding: 3px 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.slot-keep:hover { border-color: var(--accent); color: var(--accent); }
+.slot-keep.kept {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.slot-variant-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius);
+  padding: 3px 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.slot-variant-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.slot-variant-form {
+  display: flex;
+  gap: 6px;
+  padding: 0 8px 8px;
+}
+.slot-variant-form input {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 5px 7px;
+  font-size: 11.5px;
+}
+.slot-variant-form button {
+  flex: 0 0 auto;
+  background: var(--accent);
+  color: #1a1305;
+  border: none;
+  border-radius: var(--radius);
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.slot-variant-form button:hover { background: var(--accent-strong); }
 
 .slot-download {
   color: var(--accent);

@@ -60,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
   wireRefClearAll();
   wireProjects();
   wireDescribe();
+  wireKeepFilter();
   sharedFileInput.addEventListener('change', handleSharedFileChange);
   boot();
 });
@@ -628,7 +629,7 @@ function buildSlot(labelText) {
   return { el: slot, media, fill, statusLabel, actions };
 }
 
-function finishSlotDone(slotRefs, url) {
+function finishSlotDone(slotRefs, url, entry, role) {
   slotRefs.fill.remove();
   slotRefs.statusLabel.remove();
 
@@ -638,6 +639,30 @@ function finishSlotDone(slotRefs, url) {
   slotRefs.media.appendChild(img);
 
   slotRefs.actions.classList.remove('hidden');
+
+  if (entry && role) {
+    const keepBtn = document.createElement('button');
+    keepBtn.className = 'slot-keep';
+    keepBtn.type = 'button';
+    const paintKeep = () => {
+      const isKept = role === 'start' ? entry.startKept : entry.endKept;
+      keepBtn.textContent = isKept ? '★ behalten' : '☆ behalten';
+      keepBtn.classList.toggle('kept', isKept);
+    };
+    paintKeep();
+    keepBtn.addEventListener('click', () => {
+      if (role === 'start') entry.startKept = !entry.startKept;
+      else entry.endKept = !entry.endKept;
+      paintKeep();
+      upsertHistory(entry);
+      const card = slotRefs.el.closest('.card');
+      if (card) card.classList.toggle('card-kept', !!(entry.startKept || entry.endKept));
+      applyKeepFilter();
+    });
+    slotRefs.actions.appendChild(keepBtn);
+    const card0 = slotRefs.el.closest('.card');
+    if (card0 && (entry.startKept || entry.endKept)) card0.classList.add('card-kept');
+  }
 
   const dl = document.createElement('a');
   dl.className = 'slot-download';
@@ -661,6 +686,46 @@ function finishSlotDone(slotRefs, url) {
     select.value = '';
   });
   slotRefs.actions.appendChild(select);
+
+  const variantBtn = document.createElement('button');
+  variantBtn.className = 'slot-variant-btn';
+  variantBtn.type = 'button';
+  variantBtn.textContent = '↻ Variieren';
+  slotRefs.actions.appendChild(variantBtn);
+
+  const variantForm = document.createElement('div');
+  variantForm.className = 'slot-variant-form hidden';
+  const variantInput = document.createElement('input');
+  variantInput.type = 'text';
+  variantInput.placeholder = 'z.B. Kamera weiter rechts, von oben, mehr Menschen…';
+  const variantSubmit = document.createElement('button');
+  variantSubmit.type = 'button';
+  variantSubmit.textContent = 'Los';
+  variantForm.appendChild(variantInput);
+  variantForm.appendChild(variantSubmit);
+  slotRefs.el.appendChild(variantForm);
+
+  variantBtn.addEventListener('click', () => {
+    variantForm.classList.toggle('hidden');
+    if (!variantForm.classList.contains('hidden')) variantInput.focus();
+  });
+  const submitVariant = () => {
+    if (!variantInput.value.trim()) return;
+    createVariant(url, variantInput.value);
+    variantInput.value = '';
+    variantForm.classList.add('hidden');
+  };
+  variantSubmit.addEventListener('click', submitVariant);
+  variantInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      submitVariant();
+    }
+  });
+}
+
+function finishSlotEmpty(slotRefs, message) {
+  slotRefs.statusLabel.textContent = message;
 }
 
 function finishSlotError(slotRefs, message) {
@@ -668,7 +733,7 @@ function finishSlotError(slotRefs, message) {
   slotRefs.statusLabel.textContent = message;
 }
 
-function buildCardShell(modelLabel, promptStart, promptEnd) {
+function buildCardShell(modelLabel, promptStart, promptEnd, singleTag = '') {
   const hasEnd = !!promptEnd;
   const startSlot = buildSlot(hasEnd ? 'Start' : '');
   const endSlot = hasEnd ? buildSlot('Ende') : null;
@@ -691,7 +756,8 @@ function buildCardShell(modelLabel, promptStart, promptEnd) {
   promptBox.className = 'card-prompt';
   const startLine = document.createElement('div');
   startLine.className = 'prompt-line';
-  startLine.innerHTML = `<span class="prompt-tag">${hasEnd ? 'Start:' : ''}</span>${escapeHtml(promptStart)}`;
+  const startTag = hasEnd ? 'Start:' : singleTag;
+  startLine.innerHTML = `<span class="prompt-tag">${escapeHtml(startTag)}</span>${escapeHtml(promptStart)}`;
   promptBox.appendChild(startLine);
   if (hasEnd) {
     const endLine = document.createElement('div');
@@ -737,20 +803,19 @@ async function startGeneration() {
 
   const { card, startSlot, endSlot, hasEnd } = buildCardShell(currentModel.label, promptStartVal, promptEndVal);
   $('#results-grid').prepend(card);
+  applyKeepFilter();
 
   const historyEntry = {
+    id: generateId(),
     modelLabel: currentModel.label,
     promptStart: promptStartVal,
     promptEnd: hasEnd ? promptEndVal : null,
     startUrl: null,
     endUrl: null,
+    startKept: false,
+    endKept: false,
     createdAt: Date.now(),
   };
-  function maybeSaveHistory() {
-    if (historyEntry.startUrl && (!hasEnd || historyEntry.endUrl)) {
-      saveToHistory({ ...historyEntry });
-    }
-  }
 
   try {
     const res = await fetch('/api/generate-pair', {
@@ -775,9 +840,11 @@ async function startGeneration() {
       busyCount++;
       setStatus(`entwickelt … (${busyCount})`);
       pollSlot(data.start.taskId, startSlot, {
+        entry: historyEntry,
+        role: 'start',
         onDone: (url) => {
           historyEntry.startUrl = url;
-          maybeSaveHistory();
+          upsertHistory(historyEntry);
         },
         onFinally: () => {
           busyCount = Math.max(0, busyCount - 1);
@@ -793,9 +860,11 @@ async function startGeneration() {
         busyCount++;
         setStatus(`entwickelt … (${busyCount})`);
         pollSlot(data.end.taskId, endSlot, {
+          entry: historyEntry,
+          role: 'end',
           onDone: (url) => {
             historyEntry.endUrl = url;
-            maybeSaveHistory();
+            upsertHistory(historyEntry);
           },
           onFinally: () => {
             busyCount = Math.max(0, busyCount - 1);
@@ -816,7 +885,72 @@ async function startGeneration() {
   }
 }
 
-function pollSlot(taskId, slotRefs, { onDone, onError, onFinally } = {}) {
+// Einzelbild-Variante: nimmt ein fertiges Bild als einzige Referenz und einen
+// frei eingetippten Änderungswunsch (Kamerawinkel, mehr Personen, ...).
+async function createVariant(baseUrl, instructionText) {
+  const text = instructionText.trim();
+  if (!text || !currentModel) return;
+
+  const aspectRatio = $('#aspect-ratio').value;
+  const resolution = $('#resolution').value;
+
+  const { card, startSlot } = buildCardShell(currentModel.label, text, null, 'Variante:');
+  $('#results-grid').prepend(card);
+  applyKeepFilter();
+
+  const historyEntry = {
+    id: generateId(),
+    modelLabel: currentModel.label,
+    promptStart: text,
+    promptEnd: null,
+    startUrl: null,
+    endUrl: null,
+    startKept: false,
+    endKept: false,
+    createdAt: Date.now(),
+  };
+
+  try {
+    const res = await fetch('/api/generate-pair', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        modelKey: currentModel.key,
+        promptStart: text,
+        aspectRatio,
+        resolution,
+        references: [{ category: 'background', name: '', url: baseUrl }],
+        stylePrefix: getProjectStyleText(),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Variante fehlgeschlagen.');
+
+    if (data.start && data.start.taskId) {
+      busyCount++;
+      setStatus(`entwickelt … (${busyCount})`);
+      pollSlot(data.start.taskId, startSlot, {
+        entry: historyEntry,
+        role: 'start',
+        onDone: (url) => {
+          historyEntry.startUrl = url;
+          upsertHistory(historyEntry);
+        },
+        onFinally: () => {
+          busyCount = Math.max(0, busyCount - 1);
+          setStatus(busyCount > 0 ? `entwickelt … (${busyCount})` : 'bereit');
+        },
+      });
+    } else if (data.start && data.start.error) {
+      finishSlotError(startSlot, data.start.error);
+    }
+  } catch (err) {
+    console.error(err);
+    finishSlotError(startSlot, err.message || 'Unbekannter Fehler.');
+  }
+}
+
+function pollSlot(taskId, slotRefs, { entry, role, onDone, onError, onFinally } = {}) {
   let delay = 2000;
   let elapsed = 0;
   const maxElapsed = 6 * 60 * 1000;
@@ -832,7 +966,7 @@ function pollSlot(taskId, slotRefs, { onDone, onError, onFinally } = {}) {
       if (data.state === 'success') {
         const url = data.resultUrls?.[0];
         if (url) {
-          finishSlotDone(slotRefs, url);
+          finishSlotDone(slotRefs, url, entry, role);
           onDone && onDone(url);
         } else {
           finishSlotError(slotRefs, 'Fertig gemeldet, aber keine Bild-URL erhalten.');
@@ -879,13 +1013,11 @@ function pollSlot(taskId, slotRefs, { onDone, onError, onFinally } = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Verlauf (localStorage, rein lokal auf diesem Gerät)
+// Verlauf (localStorage, rein lokal auf diesem Gerät) & "Behalten"-Filter
 // ---------------------------------------------------------------------------
 
-function saveToHistory(entry) {
-  const list = readHistory();
-  list.unshift(entry);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, MAX_HISTORY)));
+function generateId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function readHistory() {
@@ -896,12 +1028,52 @@ function readHistory() {
   }
 }
 
+// Legt einen History-Eintrag an oder aktualisiert ihn (per id). Behaltene
+// Bilder (startKept/endKept) werden beim Kürzen auf MAX_HISTORY verschont,
+// damit sie nicht versehentlich aus dem Verlauf fallen.
+function upsertHistory(entry) {
+  if (!entry.startUrl && !entry.endUrl) return;
+  const list = readHistory();
+  const idx = list.findIndex((e) => e.id === entry.id);
+  if (idx >= 0) list[idx] = entry;
+  else list.unshift(entry);
+
+  const kept = list.filter((e) => e.startKept || e.endKept);
+  const rest = list.filter((e) => !(e.startKept || e.endKept));
+  const trimmedRest = rest.slice(0, Math.max(0, MAX_HISTORY - kept.length));
+  const merged = [...kept, ...trimmedRest].sort((a, b) => b.createdAt - a.createdAt);
+
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(merged));
+}
+
 function hydrateHistory() {
   const list = readHistory();
   list.forEach((entry) => {
+    if (!entry.id) entry.id = generateId(); // Kompatibilität mit älteren Verlaufseinträgen
     const { card, startSlot, endSlot } = buildCardShell(entry.modelLabel, entry.promptStart, entry.promptEnd);
-    if (entry.startUrl) finishSlotDone(startSlot, entry.startUrl);
-    if (endSlot && entry.endUrl) finishSlotDone(endSlot, entry.endUrl);
+    if (entry.startUrl) finishSlotDone(startSlot, entry.startUrl, entry, 'start');
+    else finishSlotEmpty(startSlot, 'kein Ergebnis gespeichert');
+    if (endSlot) {
+      if (entry.endUrl) finishSlotDone(endSlot, entry.endUrl, entry, 'end');
+      else finishSlotEmpty(endSlot, 'kein Ergebnis gespeichert');
+    }
     $('#results-grid').appendChild(card);
+  });
+  applyKeepFilter();
+}
+
+function applyKeepFilter() {
+  const btn = $('#filter-kept-btn');
+  const onlyKept = btn.classList.contains('active');
+  document.querySelectorAll('#results-grid .card').forEach((card) => {
+    card.classList.toggle('hidden', onlyKept && !card.classList.contains('card-kept'));
+  });
+}
+
+function wireKeepFilter() {
+  const btn = $('#filter-kept-btn');
+  btn.addEventListener('click', () => {
+    btn.classList.toggle('active');
+    applyKeepFilter();
   });
 }
