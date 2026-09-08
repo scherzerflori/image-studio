@@ -4,16 +4,22 @@
 
 const HISTORY_KEY = 'kis_history';
 const PASSWORD_KEY = 'kis_password';
+const PROJECTS_KEY = 'kis_projects';
+const LAST_PROJECT_KEY = 'kis_last_project';
 const MAX_HISTORY = 40;
 
 let MODELS = [];
 let ASPECT_RATIOS = [];
 let RESOLUTIONS = [];
 let REFERENCE_CATEGORIES = [];
+let DESCRIBE_ENABLED = false;
 let currentModel = null;
+let currentProjectName = null;
 let refState = {}; // { [categoryKey]: [ {name, url, previewUrl, status} ] }
 let busyCount = 0;
 let pendingUpload = null; // { category, index }
+let describeImageBase64 = null;
+let describeFileName = null;
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -42,10 +48,18 @@ sharedFileInput.accept = 'image/png,image/jpeg,image/webp';
 sharedFileInput.hidden = true;
 document.body.appendChild(sharedFileInput);
 
+const describeFileInput = document.createElement('input');
+describeFileInput.type = 'file';
+describeFileInput.accept = 'image/png,image/jpeg,image/webp';
+describeFileInput.hidden = true;
+document.body.appendChild(describeFileInput);
+
 document.addEventListener('DOMContentLoaded', () => {
   wireLogin();
   wireGenerate();
   wireRefClearAll();
+  wireProjects();
+  wireDescribe();
   sharedFileInput.addEventListener('change', handleSharedFileChange);
   boot();
 });
@@ -70,12 +84,15 @@ async function loadModels() {
     ASPECT_RATIOS = data.aspectRatios;
     RESOLUTIONS = data.resolutions;
     REFERENCE_CATEGORIES = data.referenceCategories;
+    DESCRIBE_ENABLED = !!data.describeEnabled;
+    $('#describe-section').classList.toggle('hidden', !DESCRIBE_ENABLED);
     initRefState();
     populateModelSelect();
     populateAspectRatios();
     populateResolutions();
     renderReferenceSections();
     updateRefStatus();
+    populateProjectSelect();
     return true;
   } catch (err) {
     console.error(err);
@@ -298,6 +315,17 @@ function renderReferenceSections() {
   });
 }
 
+async function uploadBase64ToKie(dataUrl, fileName) {
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ base64Data: dataUrl, fileName }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Upload fehlgeschlagen');
+  return data.url;
+}
+
 function handleSharedFileChange() {
   const file = sharedFileInput.files[0];
   if (!file || !pendingUpload) return;
@@ -313,14 +341,7 @@ function handleSharedFileChange() {
     refState[category][index].previewUrl = dataUrl;
     renderReferenceSections();
     try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ base64Data: dataUrl, fileName: file.name }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload fehlgeschlagen');
-      refState[category][index].url = data.url;
+      refState[category][index].url = await uploadBase64ToKie(dataUrl, file.name);
       refState[category][index].status = 'done';
     } catch (err) {
       console.error(err);
@@ -330,6 +351,218 @@ function handleSharedFileChange() {
     updateRefStatus();
   };
   reader.readAsDataURL(file);
+}
+
+// ---------------------------------------------------------------------------
+// Projekte (gespeicherte Grundeinstellungen, rein lokal im Browser)
+// ---------------------------------------------------------------------------
+
+function readProjects() {
+  try {
+    return JSON.parse(localStorage.getItem(PROJECTS_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function writeProjects(obj) {
+  localStorage.setItem(PROJECTS_KEY, JSON.stringify(obj));
+}
+
+function currentProjectSnapshot() {
+  return {
+    model: currentModel ? currentModel.key : (MODELS[0] && MODELS[0].key),
+    aspectRatio: $('#aspect-ratio').value,
+    resolution: $('#resolution').value,
+    style: $('#project-style').value,
+  };
+}
+
+function applyProjectSnapshot(snap) {
+  const model = MODELS.find((m) => m.key === snap.model) || MODELS[0];
+  $('#model-select').value = model.key;
+  applyModel(model);
+  if (snap.aspectRatio) $('#aspect-ratio').value = snap.aspectRatio;
+  if (snap.resolution) $('#resolution').value = snap.resolution;
+  $('#project-style').value = snap.style || '';
+}
+
+function populateProjectSelect() {
+  const sel = $('#project-select');
+  sel.innerHTML = '';
+  const none = document.createElement('option');
+  none.value = '';
+  none.textContent = '— kein Projekt —';
+  sel.appendChild(none);
+
+  const projects = readProjects();
+  Object.keys(projects).sort().forEach((name) => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  });
+
+  const addNew = document.createElement('option');
+  addNew.value = '__new__';
+  addNew.textContent = '+ Neues Projekt…';
+  sel.appendChild(addNew);
+
+  const lastUsed = localStorage.getItem(LAST_PROJECT_KEY);
+  if (lastUsed && projects[lastUsed]) {
+    sel.value = lastUsed;
+    currentProjectName = lastUsed;
+    applyProjectSnapshot(projects[lastUsed]);
+  }
+  $('#project-delete').classList.toggle('hidden', !currentProjectName);
+}
+
+function wireProjects() {
+  const sel = $('#project-select');
+  sel.addEventListener('change', () => {
+    if (sel.value === '__new__') {
+      const name = prompt('Name für das neue Projekt:');
+      if (!name || !name.trim()) {
+        sel.value = currentProjectName || '';
+        return;
+      }
+      const projects = readProjects();
+      projects[name.trim()] = currentProjectSnapshot();
+      writeProjects(projects);
+      currentProjectName = name.trim();
+      localStorage.setItem(LAST_PROJECT_KEY, currentProjectName);
+      populateProjectSelect();
+      sel.value = currentProjectName;
+      return;
+    }
+    currentProjectName = sel.value || null;
+    if (currentProjectName) {
+      localStorage.setItem(LAST_PROJECT_KEY, currentProjectName);
+      const projects = readProjects();
+      if (projects[currentProjectName]) applyProjectSnapshot(projects[currentProjectName]);
+    } else {
+      localStorage.removeItem(LAST_PROJECT_KEY);
+    }
+    $('#project-delete').classList.toggle('hidden', !currentProjectName);
+  });
+
+  $('#project-save').addEventListener('click', () => {
+    if (!currentProjectName) {
+      const name = prompt('Name für das neue Projekt:');
+      if (!name || !name.trim()) return;
+      currentProjectName = name.trim();
+      localStorage.setItem(LAST_PROJECT_KEY, currentProjectName);
+    }
+    const projects = readProjects();
+    projects[currentProjectName] = currentProjectSnapshot();
+    writeProjects(projects);
+    populateProjectSelect();
+    sel.value = currentProjectName;
+    $('#project-delete').classList.remove('hidden');
+    setStatus(`„${currentProjectName}“ gespeichert`);
+    setTimeout(() => setStatus(busyCount > 0 ? `entwickelt … (${busyCount})` : 'bereit'), 1500);
+  });
+
+  $('#project-delete').addEventListener('click', () => {
+    if (!currentProjectName) return;
+    if (!confirm(`Projekt „${currentProjectName}“ wirklich löschen?`)) return;
+    const projects = readProjects();
+    delete projects[currentProjectName];
+    writeProjects(projects);
+    currentProjectName = null;
+    localStorage.removeItem(LAST_PROJECT_KEY);
+    populateProjectSelect();
+  });
+}
+
+function getProjectStyleText() {
+  return $('#project-style').value.trim();
+}
+
+// ---------------------------------------------------------------------------
+// Prompt aus Referenzbild (Claude)
+// ---------------------------------------------------------------------------
+
+function wireDescribe() {
+  $('#describe-tile').addEventListener('click', () => {
+    describeFileInput.value = '';
+    describeFileInput.click();
+  });
+
+  describeFileInput.addEventListener('change', () => {
+    const file = describeFileInput.files[0];
+    if (!file) return;
+    describeFileName = file.name;
+    const reader = new FileReader();
+    reader.onload = () => {
+      describeImageBase64 = reader.result;
+      $('#describe-tile-hint').classList.add('hidden');
+      const img = $('#describe-tile-img');
+      img.src = describeImageBase64;
+      img.classList.remove('hidden');
+      $('#describe-btn').classList.remove('hidden');
+      $('#describe-result').classList.add('hidden');
+    };
+    reader.readAsDataURL(file);
+  });
+
+  $('#describe-btn').addEventListener('click', async () => {
+    if (!describeImageBase64) return;
+    const btn = $('#describe-btn');
+    btn.disabled = true;
+    btn.textContent = 'wird analysiert …';
+    try {
+      const res = await fetch('/api/describe-image', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ base64Data: describeImageBase64, styleHint: getProjectStyleText() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Beschreibung fehlgeschlagen.');
+      $('#describe-output').value = data.prompt;
+      $('#describe-result').classList.remove('hidden');
+      populateUseRefSelect($('#describe-as-ref'));
+    } catch (err) {
+      console.error(err);
+      $('#describe-output').value = '';
+      $('#describe-result').classList.remove('hidden');
+      alert(err.message || 'Beschreibung fehlgeschlagen.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Prompt erstellen';
+    }
+  });
+
+  $('#describe-use-start').addEventListener('click', () => insertDescribedPrompt('#prompt-start'));
+  $('#describe-use-end').addEventListener('click', () => insertDescribedPrompt('#prompt-end'));
+
+  const refSelect = $('#describe-as-ref');
+  refSelect.addEventListener('focus', () => populateUseRefSelect(refSelect));
+  refSelect.addEventListener('change', async () => {
+    const val = refSelect.value;
+    if (!val || !describeImageBase64) return;
+    const [cat, idxStr] = val.split(':');
+    const idx = parseInt(idxStr, 10);
+    refState[cat][idx] = { name: '', url: null, previewUrl: describeImageBase64, status: 'uploading' };
+    renderReferenceSections();
+    try {
+      refState[cat][idx].url = await uploadBase64ToKie(describeImageBase64, describeFileName || 'reference.png');
+      refState[cat][idx].status = 'done';
+    } catch (err) {
+      refState[cat][idx].status = 'error';
+    }
+    renderReferenceSections();
+    updateRefStatus();
+    refSelect.value = '';
+  });
+}
+
+function insertDescribedPrompt(targetSelector) {
+  const target = $(targetSelector);
+  const text = $('#describe-output').value;
+  if (!text) return;
+  if (target.value.trim() && !confirm('Vorhandenen Prompt-Text ersetzen?')) return;
+  target.value = text;
 }
 
 function wireRefClearAll() {
@@ -530,6 +763,7 @@ async function startGeneration() {
         aspectRatio,
         resolution,
         references: includedRefs,
+        stylePrefix: getProjectStyleText(),
       }),
     });
     const data = await res.json();

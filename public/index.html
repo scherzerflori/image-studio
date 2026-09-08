@@ -40,6 +40,18 @@
     <!-- Linke Spalte: Steuerung -->
     <aside class="darkroom">
 
+      <section class="field project-section">
+        <label class="field-label">Projekt</label>
+        <select id="project-select"></select>
+        <label class="field-label" for="project-style">Stil / Grundstimmung</label>
+        <textarea id="project-style" rows="3" placeholder="z.B. cineastisch, mystisch-düstere Lichtstimmung, extrem realistische Gesichter, keine glatte KI-Optik…"></textarea>
+        <div class="project-actions">
+          <button id="project-save" type="button">Speichern</button>
+          <button id="project-delete" type="button" class="project-delete hidden">Löschen</button>
+        </div>
+        <p class="field-hint">Wird jedem Prompt automatisch vorangestellt und als Stilvorgabe für "Prompt aus Referenzbild" genutzt. Nur lokal in diesem Browser gespeichert.</p>
+      </section>
+
       <section class="field">
         <label class="field-label">Modell</label>
         <select id="model-select"></select>
@@ -52,6 +64,23 @@
       <section class="field">
         <p id="ref-status" class="ref-status"></p>
         <button id="ref-clear-all" type="button" class="ref-clear-all">Alle Referenzen leeren</button>
+      </section>
+
+      <section id="describe-section" class="field hidden">
+        <label class="field-label">Prompt aus Referenzbild <span class="field-label-muted">(Claude)</span></label>
+        <div id="describe-tile" class="describe-tile">
+          <span id="describe-tile-hint">Bild hierher klicken</span>
+          <img id="describe-tile-img" class="hidden" alt="" />
+        </div>
+        <button id="describe-btn" type="button" class="describe-btn hidden">Prompt erstellen</button>
+        <div id="describe-result" class="describe-result hidden">
+          <textarea id="describe-output" rows="5" readonly></textarea>
+          <div class="describe-actions">
+            <button type="button" id="describe-use-start">→ Start-Prompt</button>
+            <button type="button" id="describe-use-end">→ End-Prompt</button>
+            <select id="describe-as-ref"></select>
+          </div>
+        </div>
       </section>
 
       <section class="field">
