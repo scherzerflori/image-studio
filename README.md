@@ -16,6 +16,33 @@ vermutlich zusätzlich an CORS scheitern. Der Server in diesem Projekt ist
 daher ein dünner Proxy: Er nimmt Anfragen vom Browser entgegen, hängt den
 Key aus einer Umgebungsvariable an und leitet an `api.kie.ai` weiter.
 
+## Neu: Einheitliche Dateinamen beim Download
+
+Jedes heruntergeladene Bild heißt jetzt einheitlich:
+
+```
+JJMMTT_Projekt_Stichwort_Seitenverhaeltnis_Modell.ext
+```
+
+Beispiel: `260908_Mondfahrer_high-angle-village-mist_16zu9_NanoBanana.png`
+
+- **Datum** kommt vom Erstellungszeitpunkt des Bildes.
+- **Projekt** ist das zum Zeitpunkt der Generierung aktive Projekt (siehe
+  "Projekte" oben), sonst `OhneProjekt`.
+- **Stichwort** wird automatisch aus den ersten (englischen) Schlüsselwörtern
+  des jeweiligen Prompts abgeleitet — das ist eine einfache, kostenlose
+  Heuristik ohne KI-Aufruf, liefert also nicht immer ein so pointiertes
+  Wort wie von Hand gewählt. Direkt unter jedem fertigen Bild steht ein
+  kleines Textfeld "Datei:", in dem sich das Stichwort jederzeit vor dem
+  Herunterladen überschreiben lässt.
+- **Seitenverhältnis** und **Modell** stammen aus den bei der Generierung
+  gewählten Einstellungen.
+
+Der Download läuft technisch über einen Blob-Fetch, damit der Dateiname
+zuverlässig ankommt (reine Cross-Origin-Links respektieren vorgeschlagene
+Dateinamen nicht überall zuverlässig) — falls das aus irgendeinem Grund
+blockiert wird, öffnet sich das Bild ersatzweise in einem neuen Tab.
+
 ## Neu: Bildsprache fließt in den Prompt-Generator ein, "ungesehene Perspektive"
 
 - Im Prompt-Generator (Claude) gibt es jetzt zwei Checkboxen:
