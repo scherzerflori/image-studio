@@ -32,7 +32,7 @@ const KIE_BASE = 'https://api.kie.ai/api/v1';
 const KIE_UPLOAD_BASE = 'https://kieai.redpandaai.co/api';
 
 // ---------------------------------------------------------------------------
-// Seitenverhaeltnisse, die im Interface zur Auswahl stehen
+// Seitenverhaeltnisse & Aufloesungen, die im Interface zur Auswahl stehen
 // ---------------------------------------------------------------------------
 const ASPECT_RATIOS = [
   { value: 'auto', label: 'Automatisch' },
@@ -50,25 +50,51 @@ const RESOLUTIONS = [
   { value: '4K', label: '4K' },
 ];
 
-// Ideogram nutzt statt aspect_ratio ein "image_size"-Enum. Beste bekannte
-// Zuordnung – falls Kie.ai das Enum aendert, hier anpassen.
-function ideogramSizeFromRatio(ratio) {
-  const map = {
-    auto: 'square_hd',
-    '1:1': 'square_hd',
-    '16:9': 'landscape_16_9',
-    '9:16': 'portrait_16_9',
-    '4:3': 'landscape_4_3',
-    '3:4': 'portrait_4_3',
-    '21:9': 'landscape_16_9',
-  };
-  return map[ratio] || 'square_hd';
+// ---------------------------------------------------------------------------
+// Referenzbild-Kategorien. "hasName" steuert, ob im Interface ein Namensfeld
+// neben dem Bild erscheint (nur bei Personen). maxCount ist die Anzahl an
+// Plaetzen, die im Interface angeboten werden – unabhaengig vom technischen
+// Limit des jeweiligen Modells (das regelt maxReferenceImages pro Modell,
+// siehe unten).
+// ---------------------------------------------------------------------------
+const REFERENCE_CATEGORIES = [
+  { key: 'person', label: 'Person', maxCount: 4, hasName: true },
+  { key: 'mood', label: 'Stimmung', maxCount: 3, hasName: false },
+  { key: 'background', label: 'Hintergrund/Gebäude', maxCount: 3, hasName: false },
+  { key: 'object', label: 'Gegenstand/Fahrzeug', maxCount: 3, hasName: false },
+];
+
+function categoryLabel(key) {
+  const cat = REFERENCE_CATEGORIES.find((c) => c.key === key);
+  return cat ? cat.label : key;
+}
+
+// Baut aus den mitgeschickten Referenzbildern eine kurze Beschreibung, die dem
+// Prompt vorangestellt wird – die Kie.ai-Modelle bekommen nur eine Liste von
+// Bild-URLs ohne Beschriftung, daher erklaeren wir per Text, was Bild 1, 2, 3
+// ... zeigt (Standard-Praxis bei multi-image Prompts).
+function buildReferenceDescriptor(references) {
+  if (!references.length) return '';
+  const counters = {};
+  const parts = references.map((ref, i) => {
+    counters[ref.category] = (counters[ref.category] || 0) + 1;
+    let label;
+    if (ref.category === 'person' && ref.name && ref.name.trim()) {
+      label = `Person: ${ref.name.trim()}`;
+    } else {
+      label = `${categoryLabel(ref.category)} ${counters[ref.category]}`;
+    }
+    return `${i + 1}) ${label}`;
+  });
+  return `Bildreferenzen in dieser Reihenfolge: ${parts.join(', ')}.`;
 }
 
 // ---------------------------------------------------------------------------
 // Modell-Registry – einzige Quelle der Wahrheit fuer Backend UND Frontend.
-// Jedes Modell weiss selbst, wie es sein Kie.ai-Request baut (Text- oder
-// Bild-zu-Bild-Variante je nachdem, ob Referenzbilder vorliegen).
+// Auf Wunsch reduziert auf drei Modelle. maxReferenceImages ist die
+// bestbekannte technische Obergrenze des jeweiligen Kie.ai-Modells (Stand
+// September 2026 laut Doku/Community-Quellen) – bei GPT Image 2 ist der
+// exakte Wert in der Doku nicht dokumentiert, daher vorsichtig auf 4 gesetzt.
 // ---------------------------------------------------------------------------
 const MODELS = [
   {
@@ -76,8 +102,8 @@ const MODELS = [
     label: 'Nano Banana Pro',
     vendor: 'Google',
     blurb:
-      'Der Allrounder: Text-zu-Bild und Bearbeitung mit mehreren Referenzbildern in einem Modell, starke Textwiedergabe im Bild.',
-    maxReferenceImages: 6,
+      'Der Allrounder: Text-zu-Bild und Bearbeitung mit bis zu 8 Referenzbildern in einem Modell, starke Textwiedergabe im Bild.',
+    maxReferenceImages: 8,
     supportsResolution: true,
     buildInput(ctx) {
       return {
@@ -122,7 +148,7 @@ const MODELS = [
     key: 'gpt-image-2',
     label: 'GPT Image 2',
     vendor: 'OpenAI',
-    blurb: 'Vielseitig einsetzbar – gut fuer Illustrationen, Icons und Bildvarianten.',
+    blurb: 'Vielseitig einsetzbar – gut fuer Illustrationen, Icons und Bildvarianten (bis zu 4 Referenzbilder, ungefaehr).',
     maxReferenceImages: 4,
     supportsResolution: false,
     buildInput(ctx) {
@@ -134,87 +160,6 @@ const MODELS = [
       }
       return {
         model: 'gpt-image-2-text-to-image',
-        input: { prompt: ctx.prompt, aspect_ratio: ctx.aspectRatio },
-      };
-    },
-  },
-  {
-    key: 'seedream-5-lite',
-    label: 'Seedream 5.0 Lite',
-    vendor: 'ByteDance',
-    blurb: 'Hohe Detailtreue und gute Textdarstellung im Bild, bis zu 6 Referenzbilder.',
-    maxReferenceImages: 6,
-    supportsResolution: false,
-    buildInput(ctx) {
-      if (ctx.referenceImageUrls.length > 0) {
-        return {
-          model: 'seedream/5-lite-image-to-image',
-          input: {
-            prompt: ctx.prompt,
-            image_urls: ctx.referenceImageUrls,
-            aspect_ratio: ctx.aspectRatio,
-            quality: 'basic',
-            nsfw_checker: false,
-          },
-        };
-      }
-      return {
-        model: 'seedream/5-lite-text-to-image',
-        input: { prompt: ctx.prompt, aspect_ratio: ctx.aspectRatio, quality: 'basic', nsfw_checker: false },
-      };
-    },
-  },
-  {
-    key: 'ideogram-v3',
-    label: 'Ideogram V3',
-    vendor: 'Ideogram',
-    blurb: 'Spezialist fuer Typografie, Logos und Layouts – gut lesbarer Text im Bild.',
-    maxReferenceImages: 1,
-    supportsResolution: false,
-    buildInput(ctx) {
-      const image_size = ideogramSizeFromRatio(ctx.aspectRatio);
-      if (ctx.referenceImageUrls.length > 0) {
-        return {
-          model: 'ideogram/v3-remix',
-          input: {
-            prompt: ctx.prompt,
-            image_url: ctx.referenceImageUrls[0],
-            rendering_speed: 'BALANCED',
-            style: 'AUTO',
-            expand_prompt: true,
-            image_size,
-            num_images: '1',
-          },
-        };
-      }
-      return {
-        model: 'ideogram/v3-text-to-image',
-        input: {
-          prompt: ctx.prompt,
-          rendering_speed: 'BALANCED',
-          style: 'AUTO',
-          expand_prompt: true,
-          image_size,
-        },
-      };
-    },
-  },
-  {
-    key: 'grok-imagine',
-    label: 'Grok Imagine',
-    vendor: 'xAI',
-    blurb: 'Kraeftige, stilisierte Bilder mit hoher Prompt-Treue.',
-    maxReferenceImages: 1,
-    supportsResolution: false,
-    buildInput(ctx) {
-      if (ctx.referenceImageUrls.length > 0) {
-        return {
-          model: 'grok-imagine/image-to-image',
-          input: { prompt: ctx.prompt, image_urls: [ctx.referenceImageUrls[0]], nsfw_checker: false },
-        };
-      }
-      return {
-        model: 'grok-imagine/text-to-image',
         input: { prompt: ctx.prompt, aspect_ratio: ctx.aspectRatio },
       };
     },
@@ -255,11 +200,13 @@ app.get('/api/models', requireAccess, (req, res) => {
     })),
     aspectRatios: ASPECT_RATIOS,
     resolutions: RESOLUTIONS,
+    referenceCategories: REFERENCE_CATEGORIES,
   });
 });
 
 // Referenzbild hochladen: Browser schickt Base64, wir reichen es an Kie.ai
-// weiter und geben nur die entstandene URL zurueck.
+// weiter und geben nur die entstandene URL zurueck. Wird pro Bild-Slot
+// aufgerufen (Person 1, Stimmung 2, ...).
 app.post('/api/upload', requireAccess, async (req, res) => {
   try {
     const { base64Data, fileName } = req.body || {};
@@ -288,44 +235,71 @@ app.post('/api/upload', requireAccess, async (req, res) => {
   }
 });
 
-// Generierung anstossen
-app.post('/api/generate', requireAccess, async (req, res) => {
+// Start- und (optional) Endbild in einem Aufwasch anstossen. Beide teilen
+// sich denselben Referenzbild-Pool, bekommen aber jeweils ihren eigenen
+// Prompt-Text.
+app.post('/api/generate-pair', requireAccess, async (req, res) => {
   try {
-    const { modelKey, prompt, aspectRatio, resolution, referenceImageUrls } = req.body || {};
+    const { modelKey, promptStart, promptEnd, aspectRatio, resolution, references } = req.body || {};
     const model = findModel(modelKey);
     if (!model) return res.status(400).json({ error: 'Unbekanntes Modell.' });
-    if (!prompt || !prompt.trim()) return res.status(400).json({ error: 'Prompt fehlt.' });
-
-    const refs = Array.isArray(referenceImageUrls) ? referenceImageUrls.slice(0, model.maxReferenceImages) : [];
-    const payload = model.buildInput({
-      prompt: prompt.trim(),
-      aspectRatio: aspectRatio || 'auto',
-      resolution: resolution || '1K',
-      referenceImageUrls: refs,
-    });
-
-    const upstream = await fetch(`${KIE_BASE}/jobs/createTask`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${KIE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-    const data = await upstream.json();
-    if (!upstream.ok || data.code !== 200) {
-      return res.status(upstream.status && upstream.status !== 200 ? upstream.status : 400).json({
-        error: data.msg || 'Kie.ai hat den Task abgelehnt.',
-      });
+    if (!promptStart || !promptStart.trim()) {
+      return res.status(400).json({ error: 'Start-Prompt fehlt.' });
     }
-    res.json({ taskId: data.data.taskId, modelUsed: payload.model });
+
+    // Defensive Begrenzung – das Frontend begrenzt schon selbst, aber wir
+    // verlassen uns nicht blind darauf.
+    const refs = Array.isArray(references) ? references.slice(0, model.maxReferenceImages) : [];
+    const descriptor = buildReferenceDescriptor(refs);
+    const refUrls = refs.map((r) => r.url).filter(Boolean);
+
+    async function runVariant(promptText) {
+      const finalPrompt = descriptor ? `${descriptor}\n\n${promptText.trim()}` : promptText.trim();
+      const payload = model.buildInput({
+        prompt: finalPrompt,
+        aspectRatio: aspectRatio || 'auto',
+        resolution: resolution || '1K',
+        referenceImageUrls: refUrls,
+      });
+      const upstream = await fetch(`${KIE_BASE}/jobs/createTask`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${KIE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await upstream.json();
+      if (!upstream.ok || data.code !== 200) {
+        throw new Error(data.msg || 'Kie.ai hat den Task abgelehnt.');
+      }
+      return { taskId: data.data.taskId, modelUsed: payload.model };
+    }
+
+    const result = {};
+
+    try {
+      result.start = await runVariant(promptStart);
+    } catch (err) {
+      result.start = { error: err.message };
+    }
+
+    if (promptEnd && promptEnd.trim()) {
+      try {
+        result.end = await runVariant(promptEnd);
+      } catch (err) {
+        result.end = { error: err.message };
+      }
+    }
+
+    res.json(result);
   } catch (err) {
-    console.error('Generate-Fehler:', err);
+    console.error('Generate-Pair-Fehler:', err);
     res.status(500).json({ error: 'Generierung fehlgeschlagen (Server-Fehler).' });
   }
 });
 
-// Task-Status abfragen
+// Task-Status abfragen (wird pro Bild – Start bzw. Ende – einzeln gepollt)
 app.get('/api/status/:taskId', requireAccess, async (req, res) => {
   try {
     const { taskId } = req.params;
