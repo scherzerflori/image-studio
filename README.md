@@ -16,6 +16,20 @@ vermutlich zusätzlich an CORS scheitern. Der Server in diesem Projekt ist
 daher ein dünner Proxy: Er nimmt Anfragen vom Browser entgegen, hängt den
 Key aus einer Umgebungsvariable an und leitet an `api.kie.ai` weiter.
 
+## Neu: Behalten & Varianten
+
+- **★ Behalten:** Jedes fertige Bild hat einen Stern-Button. Markierte
+  Bilder werden nie automatisch aus dem Verlauf gekürzt (der läuft sonst
+  nach 40 Einträgen ab), und der Filter-Button "★ Nur Behaltene" oben im
+  Ergebnisbereich blendet alles andere aus.
+- **↻ Variieren:** Auf jedem fertigen Bild lässt sich ein freier Text
+  eintippen (z. B. "Kamera weiter von rechts", "von oben", "mehr Menschen
+  im Hintergrund") — daraus entsteht ein neues Einzelbild, das genau
+  dieses Bild als einzige Referenz nutzt. Praktisch für schnelle
+  Bildvarianten, ohne die Referenz-Kategorien in der Seitenleiste
+  anzufassen. Wer mehrere Referenzen kombinieren will (Personen + Stimmung
+  + Hintergrund gleichzeitig), nutzt weiterhin das normale Start-/End-Formular.
+
 ## Neu: Prompt aus Referenzbild (Claude) & Projekte
 
 - **Prompt aus Referenzbild:** Bild hochladen, Claude beschreibt es als
