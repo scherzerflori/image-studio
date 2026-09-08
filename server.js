@@ -311,29 +311,52 @@ app.post('/api/generate-pair', requireAccess, async (req, res) => {
   }
 });
 
-// Referenzbild von Claude als Bildgenerierungs-Prompt beschreiben lassen.
-app.post('/api/describe-image', requireAccess, async (req, res) => {
+// Prompt generieren: aus einem hochgeladenen Bild, aus einer frei
+// eingetippten Idee, oder aus beidem zusammen.
+app.post('/api/generate-prompt', requireAccess, async (req, res) => {
   try {
     if (!ANTHROPIC_API_KEY) {
       return res.status(500).json({ error: 'ANTHROPIC_API_KEY ist auf dem Server nicht gesetzt.' });
     }
-    const { base64Data, styleHint } = req.body || {};
-    if (!base64Data) return res.status(400).json({ error: 'Bild fehlt.' });
-
-    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(base64Data);
-    if (!match) return res.status(400).json({ error: 'Ungültiges Bildformat.' });
-    const [, mediaType, base64] = match;
+    const { base64Data, ideaText, styleHint } = req.body || {};
+    const hasImage = !!base64Data;
+    const hasIdea = !!(ideaText && ideaText.trim());
+    if (!hasImage && !hasIdea) {
+      return res.status(400).json({ error: 'Bitte ein Bild hochladen oder eine Idee eingeben.' });
+    }
 
     const styleLine = styleHint && styleHint.trim()
       ? styleHint.trim()
       : 'düster-mystische Lichtstimmung, cineastisch, extrem realistische Gesichter und Ausdrücke, keine glatte "KI-Optik"';
 
+    let task;
+    if (hasImage && hasIdea) {
+      task = 'Nutze das hochgeladene Bild als visuelle Grundlage UND die zusätzliche Idee/Anweisung des Nutzers, um daraus einen einzigen, stimmigen Prompt zu formen.';
+    } else if (hasImage) {
+      task = 'Beschreibe das hochgeladene Bild vollständig als Bildgenerierungs-Prompt.';
+    } else {
+      task = 'Der Nutzer hat noch kein fertiges Bild, sondern nur eine grobe, evtl. stichwortartige oder deutschsprachige Idee. Formuliere daraus einen vollständig ausgearbeiteten, konkreten Bildgenerierungs-Prompt (erfinde plausible Details für Komposition, Licht, Kleidung etc., wo die Idee es offen lässt).';
+    }
+
     const systemPrompt =
       'Du bist ein erfahrener Prompt-Autor fuer KI-Bildgenerierung (u.a. Nano Banana Pro, Flux-2, GPT Image 2). ' +
-      'Beschreibe das hochgeladene Bild als einen einzigen, sehr detaillierten englischsprachigen Prompt: ' +
-      'Komposition, Personen (Ausdruck, Kleidung, Haltung), Hintergrund/Umgebung, Licht und Kamera/Objektiv-Look. ' +
+      task + ' ' +
+      'Der fertige Prompt ist englischsprachig, sehr detailliert: Komposition, Personen (Ausdruck, Kleidung, Haltung), ' +
+      'Hintergrund/Umgebung, Licht und Kamera/Objektiv-Look. ' +
       `Gewuenschter Stil: ${styleLine}. ` +
       'Antworte NUR mit dem fertigen Prompt-Text, ohne Einleitung, ohne Anfuehrungszeichen, ohne Markdown-Formatierung.';
+
+    const content = [];
+    if (hasImage) {
+      const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(base64Data);
+      if (!match) return res.status(400).json({ error: 'Ungültiges Bildformat.' });
+      const [, mediaType, base64] = match;
+      content.push({ type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } });
+    }
+    content.push({
+      type: 'text',
+      text: hasIdea ? `Idee/Anweisung: ${ideaText.trim()}` : 'Beschreibe dieses Bild als Bildgenerierungs-Prompt.',
+    });
 
     const upstream = await fetch(ANTHROPIC_BASE, {
       method: 'POST',
@@ -346,15 +369,7 @@ app.post('/api/describe-image', requireAccess, async (req, res) => {
         model: ANTHROPIC_MODEL,
         max_tokens: 700,
         system: systemPrompt,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-              { type: 'text', text: 'Beschreibe dieses Bild als Bildgenerierungs-Prompt.' },
-            ],
-          },
-        ],
+        messages: [{ role: 'user', content }],
       }),
     });
     const data = await upstream.json();
@@ -368,8 +383,8 @@ app.post('/api/describe-image', requireAccess, async (req, res) => {
       .trim();
     res.json({ prompt: text });
   } catch (err) {
-    console.error('Describe-Image-Fehler:', err);
-    res.status(500).json({ error: 'Bildbeschreibung fehlgeschlagen (Server-Fehler).' });
+    console.error('Generate-Prompt-Fehler:', err);
+    res.status(500).json({ error: 'Prompt-Erstellung fehlgeschlagen (Server-Fehler).' });
   }
 });
 

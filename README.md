@@ -16,6 +16,19 @@ vermutlich zusätzlich an CORS scheitern. Der Server in diesem Projekt ist
 daher ein dünner Proxy: Er nimmt Anfragen vom Browser entgegen, hängt den
 Key aus einer Umgebungsvariable an und leitet an `api.kie.ai` weiter.
 
+## Neu: Prompt-Generator statt nur Bildbeschreibung, "Prompt kopieren"
+
+- Der Claude-Bereich heißt jetzt **Prompt-Generator** und funktioniert auf
+  drei Arten: nur Bild hochladen (wie bisher), nur eine eigene Idee
+  eintippen (auch stichwortartig oder auf Deutsch — Claude formuliert
+  daraus einen vollständigen Prompt), oder beides kombiniert. Der
+  "Prompt erstellen"-Button ist aktiv, sobald mindestens eins von beidem
+  ausgefüllt ist.
+- Jedes fertige Bild hat jetzt zusätzlich einen **"⎘ Prompt"**-Button, der
+  den zugehörigen Start- bzw. End-Prompt-Text in die Zwischenablage kopiert
+  (z. B. um ihn extern weiterzuverwenden oder leicht abgewandelt erneut
+  einzusetzen).
+
 ## Neu: Behalten & Varianten
 
 - **★ Behalten:** Jedes fertige Bild hat einen Stern-Button. Markierte
