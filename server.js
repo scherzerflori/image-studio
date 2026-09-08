@@ -318,7 +318,7 @@ app.post('/api/generate-prompt', requireAccess, async (req, res) => {
     if (!ANTHROPIC_API_KEY) {
       return res.status(500).json({ error: 'ANTHROPIC_API_KEY ist auf dem Server nicht gesetzt.' });
     }
-    const { base64Data, ideaText, styleHint } = req.body || {};
+    const { base64Data, ideaText, styleHint, buildingBlocks, wantsNovelPerspective } = req.body || {};
     const hasImage = !!base64Data;
     const hasIdea = !!(ideaText && ideaText.trim());
     if (!hasImage && !hasIdea) {
@@ -328,6 +328,14 @@ app.post('/api/generate-prompt', requireAccess, async (req, res) => {
     const styleLine = styleHint && styleHint.trim()
       ? styleHint.trim()
       : 'düster-mystische Lichtstimmung, cineastisch, extrem realistische Gesichter und Ausdrücke, keine glatte "KI-Optik"';
+
+    const blocks = Array.isArray(buildingBlocks) ? buildingBlocks.filter((b) => b && b.trim()) : [];
+    const blockLine = blocks.length
+      ? ` Baue außerdem zwingend diese Vorgaben ein, wörtlich oder sinngemäß eingewoben in die Beschreibung: ${blocks.join('; ')}.`
+      : '';
+    const novelLine = wantsNovelPerspective
+      ? ' Erfinde zusätzlich eine besondere, ungewöhnliche Kamera-Perspektive oder Bildkomposition, die man in gewöhnlichen Bildern so kaum sieht — etwas Überraschendes, das trotzdem stimmig zur Szene passt und sie nicht sabotiert. Beschreibe diese Perspektive konkret und technisch im Prompt (Kamerastandort, Blickwinkel, was dadurch ins Bild oder aus dem Bild rückt).'
+      : '';
 
     let task;
     if (hasImage && hasIdea) {
@@ -343,8 +351,10 @@ app.post('/api/generate-prompt', requireAccess, async (req, res) => {
       task + ' ' +
       'Der fertige Prompt ist englischsprachig, sehr detailliert: Komposition, Personen (Ausdruck, Kleidung, Haltung), ' +
       'Hintergrund/Umgebung, Licht und Kamera/Objektiv-Look. ' +
-      `Gewuenschter Stil: ${styleLine}. ` +
-      'Antworte NUR mit dem fertigen Prompt-Text, ohne Einleitung, ohne Anfuehrungszeichen, ohne Markdown-Formatierung.';
+      `Gewuenschter Stil: ${styleLine}.` +
+      blockLine +
+      novelLine +
+      ' Antworte NUR mit dem fertigen Prompt-Text, ohne Einleitung, ohne Anfuehrungszeichen, ohne Markdown-Formatierung.';
 
     const content = [];
     if (hasImage) {

@@ -16,6 +16,23 @@ vermutlich zusätzlich an CORS scheitern. Der Server in diesem Projekt ist
 daher ein dünner Proxy: Er nimmt Anfragen vom Browser entgegen, hängt den
 Key aus einer Umgebungsvariable an und leitet an `api.kie.ai` weiter.
 
+## Neu: Bildsprache fließt in den Prompt-Generator ein, "ungesehene Perspektive"
+
+- Im Prompt-Generator (Claude) gibt es jetzt zwei Checkboxen:
+  - **"Aktuelle Bildsprache-Auswahl einbeziehen"** — nimmt die vier gerade
+    in den Dropdowns gewählten Bausteine (Kamerawinkel, Objektiv,
+    cineastischer Kniff, Stil-Referenz) und gibt sie Claude als
+    verbindliche Vorgabe mit, statt dass sie nur roh in ein Textfeld
+    eingefügt werden. Claude webt sie dann sprachlich sauber in den
+    generierten Prompt ein.
+  - **"🎲 Besondere, noch nie gesehene Perspektive vorschlagen lassen"** —
+    bittet Claude, zusätzlich eine ungewöhnliche, überraschende
+    Kamera-Perspektive oder Bildkomposition zu erfinden (konkret
+    beschrieben, nicht nur behauptet), statt bei Standard-Einstellungen zu
+    bleiben.
+  - Beide sind standardmäßig **aus**, damit nichts ungefragt in den Prompt
+    einfließt.
+
 ## Neu: Bildsprache (Kamerawinkel, Objektiv, cineastische Kniffe, Stil-Referenzen)
 
 Vier Dropdowns mit kuratierten Bausteinen, alle mit deutscher Beschriftung
