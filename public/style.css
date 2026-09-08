@@ -238,6 +238,21 @@ textarea { resize: vertical; line-height: 1.4; }
   object-fit: cover;
 }
 
+.describe-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  line-height: 1.4;
+  cursor: pointer;
+}
+.describe-checkbox input {
+  margin-top: 2px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 .describe-btn {
   background: var(--panel-alt);
   border: 1px solid var(--border);

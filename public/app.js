@@ -600,6 +600,8 @@ function wireDescribe() {
     btn.disabled = true;
     btn.textContent = 'wird erstellt …';
     try {
+      const useBlocks = $('#describe-use-blocks').checked;
+      const buildingBlocks = useBlocks ? getCurrentStyleSelections() : [];
       const res = await fetch('/api/generate-prompt', {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -607,6 +609,8 @@ function wireDescribe() {
           base64Data: describeImageBase64 || undefined,
           ideaText: $('#describe-idea').value,
           styleHint: getProjectStyleText(),
+          buildingBlocks,
+          wantsNovelPerspective: $('#describe-novel-angle').checked,
         }),
       });
       const data = await res.json();
@@ -779,6 +783,15 @@ async function generateStylePreview(phrase, label) {
     console.error(err);
     finishSlotError(startSlot, err.message || 'Unbekannter Fehler.');
   }
+}
+
+function getCurrentStyleSelections() {
+  const phrases = [];
+  document.querySelectorAll('.style-select').forEach((sel) => {
+    const entry = resolveStyleEntry(sel.dataset.category, sel.value);
+    if (entry) phrases.push(entry.phrase);
+  });
+  return phrases;
 }
 
 function renderStyleSections() {
