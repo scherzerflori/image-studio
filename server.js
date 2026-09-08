@@ -398,6 +398,73 @@ app.post('/api/generate-prompt', requireAccess, async (req, res) => {
   }
 });
 
+// Fertiges Bild von Claude gezielt auf typische KI-Generierungsfehler prüfen
+// lassen (zusätzliche/fehlende Finger, verformte Hände, unlesbarer Text, ...).
+app.post('/api/check-image', requireAccess, async (req, res) => {
+  try {
+    if (!ANTHROPIC_API_KEY) {
+      return res.status(500).json({ error: 'ANTHROPIC_API_KEY ist auf dem Server nicht gesetzt.' });
+    }
+    const { imageUrl } = req.body || {};
+    if (!imageUrl) return res.status(400).json({ error: 'imageUrl fehlt.' });
+
+    const imgResp = await fetch(imageUrl);
+    if (!imgResp.ok) return res.status(502).json({ error: 'Bild konnte nicht geladen werden (Link evtl. abgelaufen).' });
+    const arrayBuffer = await imgResp.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString('base64');
+
+    const SUPPORTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    const rawType = (imgResp.headers.get('content-type') || '').split(';')[0].trim();
+    const mediaType = SUPPORTED_TYPES.includes(rawType) ? rawType : 'image/png';
+
+    const systemPrompt =
+      'Du pruefst KI-generierte Bilder auf typische KI-Generierungsfehler: zusaetzliche oder fehlende Finger, ' +
+      'verformte oder verschmolzene Haende, asymmetrische oder verzerrte Gesichter, unlesbaren oder unsinnigen ' +
+      'Text im Bild, doppelte oder verschmolzene Koerperteile, unmoegliche Anatomie, inkonsistente Schatten oder ' +
+      'Spiegelungen, unmoegliche Objektplatzierungen. Antworte auf Deutsch, sehr knapp. Wenn dir nichts Konkretes ' +
+      'auffaellt, antworte NUR mit dem einen Satz "Keine auffälligen Fehler erkannt.". Wenn dir etwas auffaellt, ' +
+      'liste jeden Punkt in einer eigenen Zeile, beginnend mit "⚠ " und einer kurzen Ortsangabe, z.B. ' +
+      '"⚠ rechte Hand hat sechs Finger". Keine Vermutungen ueber Unklares, keine allgemeinen Stil- oder ' +
+      'Geschmackskommentare, nur klar erkennbare technische Fehler.';
+
+    const upstream = await fetch(ANTHROPIC_BASE, {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 400,
+        system: systemPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+              { type: 'text', text: 'Prüfe dieses Bild auf KI-Generierungsfehler.' },
+            ],
+          },
+        ],
+      }),
+    });
+    const data = await upstream.json();
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ error: data.error?.message || 'Claude-Anfrage fehlgeschlagen.' });
+    }
+    const text = (data.content || [])
+      .filter((block) => block.type === 'text')
+      .map((block) => block.text)
+      .join('\n')
+      .trim();
+    res.json({ report: text });
+  } catch (err) {
+    console.error('Check-Image-Fehler:', err);
+    res.status(500).json({ error: 'Prüfung fehlgeschlagen (Server-Fehler).' });
+  }
+});
+
 // Task-Status abfragen (wird pro Bild – Start bzw. Ende – einzeln gepollt)
 app.get('/api/status/:taskId', requireAccess, async (req, res) => {
   try {

@@ -16,6 +16,22 @@ vermutlich zusätzlich an CORS scheitern. Der Server in diesem Projekt ist
 daher ein dünner Proxy: Er nimmt Anfragen vom Browser entgegen, hängt den
 Key aus einer Umgebungsvariable an und leitet an `api.kie.ai` weiter.
 
+## Neu: KI-Check ("zusätzliche Hand" & Co. automatisch erkennen)
+
+Jedes fertige Bild hat einen **"🔍 KI-Check"**-Button (nur sichtbar, wenn
+`ANTHROPIC_API_KEY` gesetzt ist). Claude schaut sich das Bild gezielt auf
+typische KI-Generierungsfehler an — zusätzliche/fehlende Finger, verformte
+Hände, asymmetrische Gesichter, unlesbarer Text im Bild, unmögliche
+Anatomie, inkonsistente Schatten/Spiegelungen — und meldet entweder "keine
+auffälligen Fehler erkannt" (grün) oder eine kurze Liste konkreter Punkte
+mit Ortsangabe (rot). Das Ergebnis wird direkt unter dem Bild angezeigt und
+bleibt gespeichert (auch nach Neuladen der Seite sichtbar).
+
+Bewusst **auf Klick**, nicht automatisch nach jeder Generierung — sonst
+würde jedes Bild zusätzliche Claude-Kosten verursachen, auch verworfene
+Versuche. Wer eine automatische Prüfung nach jeder Generierung möchte,
+kann das als Option ergänzen (kleiner Umbau in `app.js`/`server.js`).
+
 ## Neu: Einheitliche Dateinamen beim Download
 
 Jedes heruntergeladene Bild heißt jetzt einheitlich:
