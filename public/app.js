@@ -6,6 +6,7 @@ const HISTORY_KEY = 'kis_history';
 const PASSWORD_KEY = 'kis_password';
 const PROJECTS_KEY = 'kis_projects';
 const LAST_PROJECT_KEY = 'kis_last_project';
+const CUSTOM_STYLE_KEY = 'kis_custom_style_entries';
 const MAX_HISTORY = 40;
 
 let MODELS = [];
@@ -20,6 +21,83 @@ let busyCount = 0;
 let pendingUpload = null; // { category, index }
 let describeImageBase64 = null;
 let describeFileName = null;
+let lastFocusedPromptField = 'start'; // 'start' | 'end' – Ziel für "→ Einfügen"
+
+// Feste Bildsprache-Bausteine: Deutsches Label fürs Dropdown, englische
+// Formulierung, die tatsächlich in den Prompt eingefügt wird. Bei den
+// Stil-Referenzen bewusst nur Licht/Farbe/Komposition beschrieben, keine
+// Filmtitel, Figuren oder Handlung im eingefügten Text – der Titel dient nur
+// der Orientierung im Dropdown.
+const STYLE_CATEGORIES = [
+  {
+    key: 'angle',
+    label: 'Kamerawinkel',
+    entries: [
+      { label: 'Augenhöhe', phrase: 'eye-level camera angle, neutral perspective, subject as an equal' },
+      { label: 'Froschperspektive (von unten)', phrase: 'low-angle shot from below, subject looks powerful and imposing' },
+      { label: 'Vogelperspektive (von oben)', phrase: "high-angle shot looking down, subject appears small and vulnerable" },
+      { label: 'Steile Draufsicht (direkt von oben)', phrase: "top-down bird's-eye view, directly overhead, abstract diagrammatic composition" },
+      { label: 'Bodenhöhe', phrase: 'extreme low camera near ground level, subject looms monumental and imposing' },
+      { label: 'Schulterblick', phrase: 'over-the-shoulder shot, framing a relationship between two subjects' },
+      { label: 'Subjektive Kamera (POV)', phrase: "first-person point-of-view shot, as if seen through the subject's own eyes" },
+      { label: 'Schräge Kamera (Dutch Angle)', phrase: 'dutch angle, tilted horizon, creating unease and tension' },
+      { label: 'Weite Übersicht (Establishing Shot)', phrase: 'wide establishing shot, placing the subject within its full environment' },
+      { label: 'Nahaufnahme', phrase: 'close-up shot, focused on facial expression and emotion' },
+      { label: 'Extreme Detailaufnahme', phrase: 'extreme close-up on a single detail (eye, hand, object), heightened intensity' },
+    ],
+  },
+  {
+    key: 'lens',
+    label: 'Objektiv',
+    entries: [
+      { label: 'Sehr weiter Blickwinkel', phrase: 'ultra-wide-angle lens look, exaggerated sense of space and scale' },
+      { label: 'Neutrale Perspektive', phrase: 'natural, undistorted perspective matching the human eye' },
+      { label: 'Schmeichelnde Porträt-Kompression', phrase: 'flattering portrait lens compression, soft creamy background blur' },
+      { label: 'Starke Distanz-Kompression', phrase: 'strong telephoto compression, background appears closer and larger, isolating the subject' },
+      { label: 'Sehr geringe Schärfentiefe', phrase: 'extremely shallow depth of field, only the subject in sharp focus, everything else soft' },
+      { label: 'Große Schärfentiefe', phrase: 'deep focus, sharp from foreground to background, documentary feel' },
+      { label: 'Gewölbte Extremverzerrung (Fisheye)', phrase: 'fisheye lens distortion, surreal warped dreamlike look' },
+      { label: 'Miniatur-Effekt (Tilt-Shift)', phrase: 'tilt-shift miniature effect, real scene looking like a small-scale model' },
+    ],
+  },
+  {
+    key: 'technique',
+    label: 'Cineastischer Kniff',
+    entries: [
+      { label: 'Silhouette im Gegenlicht', phrase: 'subject in silhouette against strong backlight' },
+      { label: 'Rembrandt-Licht', phrase: 'Rembrandt lighting, strong chiaroscuro with a small triangle of light on the cheek' },
+      { label: 'Sichtbare Lichtquelle im Bild', phrase: 'visible practical light source in frame (candle, lantern, window light)' },
+      { label: 'Lichtstrahlen im Nebel (God Rays)', phrase: 'god rays, visible light beams cutting through mist or dust' },
+      { label: 'Spiegelung', phrase: 'reflection in wet pavement, glass, or water doubling the subject' },
+      { label: 'Rahmen im Rahmen', phrase: 'frame within a frame, subject framed by a doorway, window, or archway' },
+      { label: 'Unschärfe im Vordergrund', phrase: 'blurred foreground element, voyeuristic sense of depth' },
+      { label: 'Teal-&-Orange-Look', phrase: 'teal and orange color grade, warm skin tones against cool blue shadows' },
+      { label: 'Filmkorn', phrase: 'visible film grain, analog nostalgic texture' },
+      { label: 'Nebel/Dunst zwischen Bildebenen', phrase: 'layered fog and haze separating foreground and background, mystical atmosphere' },
+      { label: 'Symmetrische Komposition', phrase: 'perfectly symmetrical composition, formal and quietly unsettling' },
+      { label: 'Leerer Raum um die Figur (Negative Space)', phrase: 'vast negative space around the subject, emphasizing isolation' },
+    ],
+  },
+  {
+    key: 'filmref',
+    label: 'Stil-Referenz',
+    entries: [
+      { label: 'Barry Lyndon', phrase: 'lit only by candlelight and natural light, painterly historical composition, muted earth tones' },
+      { label: 'Nosferatu (2024)', phrase: 'deep gothic shadows, cold moonlight, flickering candlelight contrast, dread-filled atmosphere' },
+      { label: "Pan's Labyrinth", phrase: 'desaturated fantasy blue-grey palette, warm firelight contrast, dark fairy-tale mood' },
+      { label: '1917', phrase: 'immersive, almost documentary-style handheld camera movement, natural muted daylight' },
+      { label: 'The Revenant', phrase: 'entirely natural light, harsh wilderness, cold desaturated color palette' },
+      { label: 'The Grand Budapest Hotel', phrase: 'symmetrical, pastel color palette, formal storybook composition' },
+      { label: 'The Lighthouse', phrase: 'high-contrast black and white, claustrophobic square aspect ratio' },
+      { label: 'Se7en', phrase: 'grimy green-tinted darkness, oppressive close quarters, hard shadows' },
+      { label: 'Chernobyl (Miniserie)', phrase: 'desaturated Soviet grey-green palette, documentary dread' },
+      { label: 'Mad Max: Fury Road', phrase: 'high contrast teal-and-orange grade, kinetic vast desert scale' },
+      { label: 'Blade Runner 2049', phrase: 'neon-soaked haze, monumental isolation in cold vast spaces' },
+      { label: 'The Godfather', phrase: 'warm amber interior lighting, deep shadow, formal classical composition' },
+      { label: 'Amélie', phrase: 'rich warm gold and green tones, playfully staged compositions' },
+    ],
+  },
+];
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -61,6 +139,8 @@ document.addEventListener('DOMContentLoaded', () => {
   wireProjects();
   wireDescribe();
   wireKeepFilter();
+  wirePromptFocusTracking();
+  renderStyleSections();
   sharedFileInput.addEventListener('change', handleSharedFileChange);
   boot();
 });
@@ -573,6 +653,207 @@ function insertDescribedPrompt(targetSelector) {
   if (!text) return;
   if (target.value.trim() && !confirm('Vorhandenen Prompt-Text ersetzen?')) return;
   target.value = text;
+}
+
+// ---------------------------------------------------------------------------
+// Bildsprache: Kamerawinkel / Objektiv / Cineastischer Kniff / Stil-Referenz
+// ---------------------------------------------------------------------------
+
+function wirePromptFocusTracking() {
+  $('#prompt-start').addEventListener('focus', () => {
+    lastFocusedPromptField = 'start';
+  });
+  $('#prompt-end').addEventListener('focus', () => {
+    lastFocusedPromptField = 'end';
+  });
+}
+
+function readCustomStyleEntries() {
+  try {
+    return JSON.parse(localStorage.getItem(CUSTOM_STYLE_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function writeCustomStyleEntries(obj) {
+  localStorage.setItem(CUSTOM_STYLE_KEY, JSON.stringify(obj));
+}
+
+function resolveStyleEntry(categoryKey, value) {
+  if (!value) return null;
+  const [kind, idxStr] = value.split(':');
+  const idx = parseInt(idxStr, 10);
+  if (kind === 'built') {
+    const cat = STYLE_CATEGORIES.find((c) => c.key === categoryKey);
+    return cat ? cat.entries[idx] : null;
+  }
+  const custom = readCustomStyleEntries();
+  return (custom[categoryKey] || [])[idx] || null;
+}
+
+function addCustomStyleEntry(categoryKey) {
+  const label = prompt('Kurzer Name für das Dropdown (z.B. "Regenschauer"):');
+  if (!label || !label.trim()) return;
+  const phrase = prompt('Englischer Prompt-Text, der beim Einfügen verwendet wird:');
+  if (!phrase || !phrase.trim()) return;
+
+  const custom = readCustomStyleEntries();
+  if (!custom[categoryKey]) custom[categoryKey] = [];
+  custom[categoryKey].push({ label: label.trim(), phrase: phrase.trim() });
+  writeCustomStyleEntries(custom);
+
+  renderStyleSections();
+  const sel = document.querySelector(`.style-select[data-category="${categoryKey}"]`);
+  if (sel) {
+    sel.value = `custom:${custom[categoryKey].length - 1}`;
+    sel.dispatchEvent(new Event('change'));
+  }
+}
+
+function insertStylePhrase(phrase) {
+  const targetId = lastFocusedPromptField === 'end' ? '#prompt-end' : '#prompt-start';
+  const el = $(targetId);
+  const sep = el.value.trim() ? ', ' : '';
+  el.value = el.value + sep + phrase;
+}
+
+// Erzeugt ein einzelnes Beispielbild aus der Stilbeschreibung heraus (mit
+// einer neutralen Platzhalter-Szene), damit man sieht, was der Baustein
+// bewirkt — ohne echte Filmstills zu verwenden. Läuft über dieselbe
+// Generierungs-Pipeline wie ein normales Bild.
+async function generateStylePreview(phrase, label) {
+  if (!currentModel) return;
+  const previewPrompt = `${phrase}, a person standing in a softly lit interior`;
+
+  const { card, startSlot } = buildCardShell(currentModel.label, previewPrompt, null, `Vorschau – ${label}:`);
+  $('#results-grid').prepend(card);
+  applyKeepFilter();
+
+  const historyEntry = {
+    id: generateId(),
+    modelLabel: currentModel.label,
+    promptStart: previewPrompt,
+    promptEnd: null,
+    startUrl: null,
+    endUrl: null,
+    startKept: false,
+    endKept: false,
+    createdAt: Date.now(),
+  };
+
+  try {
+    const res = await fetch('/api/generate-pair', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        modelKey: currentModel.key,
+        promptStart: previewPrompt,
+        aspectRatio: $('#aspect-ratio').value,
+        resolution: $('#resolution').value,
+        references: [],
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Vorschau fehlgeschlagen.');
+
+    if (data.start && data.start.taskId) {
+      busyCount++;
+      setStatus(`entwickelt … (${busyCount})`);
+      pollSlot(data.start.taskId, startSlot, {
+        entry: historyEntry,
+        role: 'start',
+        onDone: (url) => {
+          historyEntry.startUrl = url;
+          upsertHistory(historyEntry);
+        },
+        onFinally: () => {
+          busyCount = Math.max(0, busyCount - 1);
+          setStatus(busyCount > 0 ? `entwickelt … (${busyCount})` : 'bereit');
+        },
+      });
+    } else if (data.start && data.start.error) {
+      finishSlotError(startSlot, data.start.error);
+    }
+  } catch (err) {
+    console.error(err);
+    finishSlotError(startSlot, err.message || 'Unbekannter Fehler.');
+  }
+}
+
+function renderStyleSections() {
+  const container = $('#style-sections');
+  if (!container) return;
+  container.innerHTML = '';
+  const custom = readCustomStyleEntries();
+
+  STYLE_CATEGORIES.forEach((cat) => {
+    const section = document.createElement('div');
+    section.className = 'ref-category';
+
+    const label = document.createElement('div');
+    label.className = 'ref-category-label';
+    label.textContent = cat.label;
+    section.appendChild(label);
+
+    const select = document.createElement('select');
+    select.className = 'style-select';
+    select.dataset.category = cat.key;
+    cat.entries.forEach((entry, i) => {
+      const opt = document.createElement('option');
+      opt.value = `built:${i}`;
+      opt.textContent = entry.label;
+      select.appendChild(opt);
+    });
+    (custom[cat.key] || []).forEach((entry, i) => {
+      const opt = document.createElement('option');
+      opt.value = `custom:${i}`;
+      opt.textContent = `${entry.label} ✎`;
+      select.appendChild(opt);
+    });
+    section.appendChild(select);
+
+    const preview = document.createElement('p');
+    preview.className = 'style-preview-text';
+    const updatePreviewText = () => {
+      const entry = resolveStyleEntry(cat.key, select.value);
+      preview.textContent = entry ? entry.phrase : '';
+    };
+    updatePreviewText();
+    select.addEventListener('change', updatePreviewText);
+    section.appendChild(preview);
+
+    const row = document.createElement('div');
+    row.className = 'describe-actions';
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.textContent = '+ Eigener Eintrag';
+    addBtn.addEventListener('click', () => addCustomStyleEntry(cat.key));
+    row.appendChild(addBtn);
+
+    const previewBtn = document.createElement('button');
+    previewBtn.type = 'button';
+    previewBtn.textContent = '👁 Vorschaubild';
+    previewBtn.addEventListener('click', () => {
+      const entry = resolveStyleEntry(cat.key, select.value);
+      if (entry) generateStylePreview(entry.phrase, entry.label);
+    });
+    row.appendChild(previewBtn);
+
+    const insertBtn = document.createElement('button');
+    insertBtn.type = 'button';
+    insertBtn.className = 'style-insert-btn';
+    insertBtn.textContent = '→ Einfügen';
+    insertBtn.addEventListener('click', () => {
+      const entry = resolveStyleEntry(cat.key, select.value);
+      if (entry) insertStylePhrase(entry.phrase);
+    });
+    row.appendChild(insertBtn);
+
+    section.appendChild(row);
+    container.appendChild(section);
+  });
 }
 
 function wireRefClearAll() {

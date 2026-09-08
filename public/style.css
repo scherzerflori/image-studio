@@ -284,6 +284,19 @@ textarea { resize: vertical; line-height: 1.4; }
   padding: 5px 6px;
 }
 
+.style-preview-text {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-style: italic;
+  margin: 4px 0 0;
+  line-height: 1.4;
+}
+
+.describe-actions .style-insert-btn {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ---------- Referenzbild-Kategorien (Personen / Stimmung / etc.) ---------- */
 
 .ref-category {
