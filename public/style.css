@@ -613,6 +613,39 @@ textarea { resize: vertical; line-height: 1.4; }
 }
 .slot-copy:hover { border-color: var(--accent); color: var(--accent); }
 
+.slot-check-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius);
+  padding: 3px 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.slot-check-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.slot-check-btn:disabled { color: var(--text-faint); cursor: not-allowed; }
+
+.slot-check-result {
+  margin: 0 8px 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.slot-check-result p { margin: 0; }
+.slot-check-result p + p { margin-top: 2px; }
+.slot-check-result.is-clean {
+  border-color: var(--success);
+  color: var(--success);
+  background: rgba(143, 174, 122, 0.08);
+}
+.slot-check-result.is-warn {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(217, 105, 95, 0.08);
+}
+
 .slot-variant-btn {
   background: transparent;
   border: 1px solid var(--border);

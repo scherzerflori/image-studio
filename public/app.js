@@ -1048,6 +1048,59 @@ function finishSlotDone(slotRefs, url, entry, role) {
   });
   slotRefs.actions.appendChild(select);
 
+  if (entry && role && DESCRIBE_ENABLED) {
+    const checkBtn = document.createElement('button');
+    checkBtn.className = 'slot-check-btn';
+    checkBtn.type = 'button';
+    checkBtn.textContent = '🔍 KI-Check';
+
+    const checkResultEl = document.createElement('div');
+    checkResultEl.className = 'slot-check-result hidden';
+
+    const renderCheckResult = (text) => {
+      checkResultEl.innerHTML = '';
+      checkResultEl.classList.remove('hidden');
+      const isClean = /keine auff/i.test(text || '');
+      checkResultEl.classList.toggle('is-clean', isClean);
+      checkResultEl.classList.toggle('is-warn', !isClean);
+      (text || '').split('\n').filter((l) => l.trim()).forEach((line) => {
+        const p = document.createElement('p');
+        p.textContent = line.trim();
+        checkResultEl.appendChild(p);
+      });
+    };
+
+    const existingReport = role === 'start' ? entry.startCheck : entry.endCheck;
+    if (existingReport) renderCheckResult(existingReport);
+
+    checkBtn.addEventListener('click', async () => {
+      checkBtn.disabled = true;
+      checkBtn.textContent = 'prüft …';
+      try {
+        const res = await fetch('/api/check-image', {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ imageUrl: url }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Prüfung fehlgeschlagen.');
+        if (role === 'start') entry.startCheck = data.report;
+        else entry.endCheck = data.report;
+        upsertHistory(entry);
+        renderCheckResult(data.report);
+      } catch (err) {
+        console.error(err);
+        renderCheckResult(`⚠ Prüfung fehlgeschlagen: ${err.message || 'unbekannter Fehler'}`);
+      } finally {
+        checkBtn.disabled = false;
+        checkBtn.textContent = '🔍 KI-Check';
+      }
+    });
+
+    slotRefs.actions.appendChild(checkBtn);
+    slotRefs.el.appendChild(checkResultEl);
+  }
+
   const variantBtn = document.createElement('button');
   variantBtn.className = 'slot-variant-btn';
   variantBtn.type = 'button';
@@ -1376,6 +1429,8 @@ function makeHistoryEntry(promptStart, promptEnd, aspectRatio) {
     endKept: false,
     startSlug: null,
     endSlug: null,
+    startCheck: null,
+    endCheck: null,
     createdAt: Date.now(),
   };
 }
