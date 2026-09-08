@@ -16,6 +16,36 @@ vermutlich zusätzlich an CORS scheitern. Der Server in diesem Projekt ist
 daher ein dünner Proxy: Er nimmt Anfragen vom Browser entgegen, hängt den
 Key aus einer Umgebungsvariable an und leitet an `api.kie.ai` weiter.
 
+## Neu: Bildsprache (Kamerawinkel, Objektiv, cineastische Kniffe, Stil-Referenzen)
+
+Vier Dropdowns mit kuratierten Bausteinen, alle mit deutscher Beschriftung
+im Menü und englischem Text, der tatsächlich in den Prompt wandert:
+
+- **Kamerawinkel** — Augenhöhe, Froschperspektive, Vogelperspektive, POV, …
+- **Objektiv** — beschrieben nach Wirkung (z. B. "schmeichelnde
+  Porträt-Kompression"), nicht nach technischem Namen
+- **Cineastischer Kniff** — Rembrandt-Licht, God Rays, Teal-&-Orange, …
+- **Stil-Referenz** — an bekannte Filme/Serien angelehnt (z. B. Barry
+  Lyndon, Blade Runner 2049). Wichtig: In den Prompt wandert **nur eine
+  handgeschriebene Licht-/Farb-/Kompositionsbeschreibung**, nie der
+  Filmtitel selbst und nie Figuren/Handlung — Stil ist rechtlich unbedenklich,
+  ein zu genau nachgebautes Bild wäre es potenziell nicht. (Keine
+  Rechtsberatung, aber die im Prompt-Engineering übliche und sichere Praxis.)
+
+**Eigene Einträge:** "+ Eigener Eintrag" fragt nach einem kurzen Namen fürs
+Dropdown und dem englischen Prompt-Text, der eingefügt werden soll — landet
+per `localStorage` dauerhaft in der jeweiligen Liste (rein lokal, wie
+Verlauf und Projekte).
+
+**Vorschaubild:** Erzeugt bei Bedarf ein einzelnes Beispielbild aus der
+Stilbeschreibung heraus (mit einer neutralen Platzhalterszene), über das
+aktuell gewählte Modell — bewusst **keine echten Filmstills**, sondern ein
+frisch generiertes Bild, das nur den beschriebenen Stil zeigt. Kostet wie
+jede normale Generierung reguläres Guthaben, läuft nur auf Klick.
+
+**Einfügen:** Landet im zuletzt angeklickten Prompt-Feld (Start oder Ende),
+angehängt an bestehenden Text.
+
 ## Neu: Prompt-Generator statt nur Bildbeschreibung, "Prompt kopieren"
 
 - Der Claude-Bereich heißt jetzt **Prompt-Generator** und funktioniert auf
