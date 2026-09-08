@@ -652,12 +652,41 @@ textarea { resize: vertical; line-height: 1.4; }
 .slot-variant-form button:hover { background: var(--accent-strong); }
 
 .slot-download {
+  background: transparent;
+  border: none;
   color: var(--accent);
   text-decoration: none;
   font-family: var(--mono);
   font-size: 11px;
+  padding: 0;
+  cursor: pointer;
 }
 .slot-download:hover { color: var(--accent-strong); }
+
+.slot-slug-wrap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px 8px;
+}
+.slot-slug-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  flex: 0 0 auto;
+}
+.slot-slug-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 3px 6px;
+  font-size: 10.5px;
+  font-family: var(--mono);
+  color: var(--text-dim);
+}
+.slot-slug-input:focus { color: var(--text); border-color: var(--accent); }
 
 .slot-use-ref {
   font-size: 10.5px;

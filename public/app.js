@@ -734,17 +734,7 @@ async function generateStylePreview(phrase, label) {
   $('#results-grid').prepend(card);
   applyKeepFilter();
 
-  const historyEntry = {
-    id: generateId(),
-    modelLabel: currentModel.label,
-    promptStart: previewPrompt,
-    promptEnd: null,
-    startUrl: null,
-    endUrl: null,
-    startKept: false,
-    endKept: false,
-    createdAt: Date.now(),
-  };
+  const historyEntry = makeHistoryEntry(previewPrompt, null, $('#aspect-ratio').value);
 
   try {
     const res = await fetch('/api/generate-pair', {
@@ -967,12 +957,59 @@ function finishSlotDone(slotRefs, url, entry, role) {
     if (card0 && (entry.startKept || entry.endKept)) card0.classList.add('card-kept');
   }
 
-  const dl = document.createElement('a');
+  const dl = document.createElement('button');
+  dl.type = 'button';
   dl.className = 'slot-download';
-  dl.href = url;
   dl.textContent = '↓ Bild';
-  dl.setAttribute('download', '');
+  dl.addEventListener('click', async () => {
+    const filename = entry && role ? buildFileName(entry, role, url) : 'bild.png';
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('fetch fehlgeschlagen');
+      const blob = await resp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    } catch (err) {
+      // Fallback, falls der Cross-Origin-Fetch blockiert wird: Bild in neuem
+      // Tab öffnen, Dateiname wird dann vom Browser ggf. nicht übernommen.
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+  });
   slotRefs.actions.appendChild(dl);
+
+  if (entry && role) {
+    const slugWrap = document.createElement('div');
+    slugWrap.className = 'slot-slug-wrap';
+    const slugLabel = document.createElement('span');
+    slugLabel.className = 'slot-slug-label';
+    slugLabel.textContent = 'Datei:';
+    const slugInput = document.createElement('input');
+    slugInput.type = 'text';
+    slugInput.className = 'slot-slug-input';
+    slugInput.value = (role === 'start' ? entry.startSlug : entry.endSlug) || deriveSlugFromPrompt(role === 'start' ? entry.promptStart : entry.promptEnd);
+    slugInput.title = 'Stichwort im Dateinamen – frei editierbar';
+    slugInput.addEventListener('input', () => {
+      if (role === 'start') entry.startSlug = slugInput.value;
+      else entry.endSlug = slugInput.value;
+    });
+    slugInput.addEventListener('blur', () => upsertHistory(entry));
+    slugWrap.appendChild(slugLabel);
+    slugWrap.appendChild(slugInput);
+    slotRefs.el.appendChild(slugWrap);
+  }
 
   if (entry && role) {
     const copyBtn = document.createElement('button');
@@ -1129,17 +1166,7 @@ async function startGeneration() {
   $('#results-grid').prepend(card);
   applyKeepFilter();
 
-  const historyEntry = {
-    id: generateId(),
-    modelLabel: currentModel.label,
-    promptStart: promptStartVal,
-    promptEnd: hasEnd ? promptEndVal : null,
-    startUrl: null,
-    endUrl: null,
-    startKept: false,
-    endKept: false,
-    createdAt: Date.now(),
-  };
+  const historyEntry = makeHistoryEntry(promptStartVal, hasEnd ? promptEndVal : null, aspectRatio);
 
   try {
     const res = await fetch('/api/generate-pair', {
@@ -1222,17 +1249,7 @@ async function createVariant(baseUrl, instructionText) {
   $('#results-grid').prepend(card);
   applyKeepFilter();
 
-  const historyEntry = {
-    id: generateId(),
-    modelLabel: currentModel.label,
-    promptStart: text,
-    promptEnd: null,
-    startUrl: null,
-    endUrl: null,
-    startKept: false,
-    endKept: false,
-    createdAt: Date.now(),
-  };
+  const historyEntry = makeHistoryEntry(text, null, aspectRatio);
 
   try {
     const res = await fetch('/api/generate-pair', {
@@ -1342,6 +1359,82 @@ function pollSlot(taskId, slotRefs, { entry, role, onDone, onError, onFinally } 
 
 function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function makeHistoryEntry(promptStart, promptEnd, aspectRatio) {
+  return {
+    id: generateId(),
+    modelKey: currentModel.key,
+    modelLabel: currentModel.label,
+    projectName: currentProjectName || null,
+    aspectRatio: aspectRatio || 'auto',
+    promptStart,
+    promptEnd: promptEnd || null,
+    startUrl: null,
+    endUrl: null,
+    startKept: false,
+    endKept: false,
+    startSlug: null,
+    endSlug: null,
+    createdAt: Date.now(),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Einheitliche Dateinamen: JJMMTT_Projekt_Stichwort_Seitenverhaeltnis_Modell
+// ---------------------------------------------------------------------------
+
+const MODEL_FILE_SLUGS = {
+  'nano-banana-pro': 'NanoBanana',
+  'flux-2-pro': 'Flux2',
+  'gpt-image-2': 'GPTImage2',
+};
+
+const SLUG_STOPWORDS = new Set([
+  'a', 'an', 'the', 'of', 'in', 'on', 'with', 'and', 'is', 'are', 'this', 'that',
+  'from', 'at', 'to', 'by', 'into', 'onto', 'for', 'as', 'her', 'his', 'their',
+  'she', 'he', 'they', 'it', 'shot', 'image', 'photo',
+]);
+
+function sanitizeSlug(text) {
+  const clean = (text || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '') // Akzente/Umlaut-Diakritika entfernen
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return (clean || 'x').slice(0, 40);
+}
+
+function deriveSlugFromPrompt(text) {
+  if (!text) return 'bild';
+  const words = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w && !SLUG_STOPWORDS.has(w));
+  return sanitizeSlug(words.slice(0, 4).join('-'));
+}
+
+function guessExtension(url) {
+  const m = /\.([a-zA-Z0-9]{2,5})(?:\?|#|$)/.exec((url || '').split('?')[0]);
+  return m ? m[1].toLowerCase() : 'png';
+}
+
+function buildFileName(entry, role, url) {
+  const d = new Date(entry.createdAt || Date.now());
+  const yy = String(d.getFullYear() % 100).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+
+  const project = sanitizeSlug(entry.projectName || 'OhneProjekt');
+  const manualSlug = role === 'start' ? entry.startSlug : entry.endSlug;
+  const promptText = role === 'start' ? entry.promptStart : entry.promptEnd;
+  const keyword = sanitizeSlug(manualSlug || deriveSlugFromPrompt(promptText));
+  const ratio = (entry.aspectRatio || 'auto').replace(/:/g, 'zu');
+  const model = MODEL_FILE_SLUGS[entry.modelKey] || sanitizeSlug(entry.modelLabel || 'Modell');
+  const ext = guessExtension(url);
+
+  return `${yy}${mm}${dd}_${project}_${keyword}_${ratio}_${model}.${ext}`;
 }
 
 function readHistory() {
