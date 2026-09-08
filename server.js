@@ -20,6 +20,7 @@ app.use(express.json({ limit: '25mb' })); // genug Platz fuer Base64-Bilder
 const PORT = process.env.PORT || 3000;
 const KIE_API_KEY = process.env.KIE_API_KEY;
 const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD; // optional
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY; // optional, nur fuer "Prompt aus Referenzbild"
 
 if (!KIE_API_KEY) {
   console.warn(
@@ -27,9 +28,17 @@ if (!KIE_API_KEY) {
       'Render-Environment-Variablen eintragen, sonst schlagen alle Anfragen an Kie.ai fehl.'
   );
 }
+if (!ANTHROPIC_API_KEY) {
+  console.warn(
+    '[HINWEIS] ANTHROPIC_API_KEY ist nicht gesetzt. Die Funktion "Prompt aus Referenzbild" ' +
+      'bleibt ohne diesen Key deaktiviert, der Rest der Seite funktioniert trotzdem normal.'
+  );
+}
 
 const KIE_BASE = 'https://api.kie.ai/api/v1';
 const KIE_UPLOAD_BASE = 'https://kieai.redpandaai.co/api';
+const ANTHROPIC_BASE = 'https://api.anthropic.com/v1/messages';
+const ANTHROPIC_MODEL = 'claude-sonnet-5';
 
 // ---------------------------------------------------------------------------
 // Seitenverhaeltnisse & Aufloesungen, die im Interface zur Auswahl stehen
@@ -201,6 +210,7 @@ app.get('/api/models', requireAccess, (req, res) => {
     aspectRatios: ASPECT_RATIOS,
     resolutions: RESOLUTIONS,
     referenceCategories: REFERENCE_CATEGORIES,
+    describeEnabled: !!ANTHROPIC_API_KEY,
   });
 });
 
@@ -240,7 +250,7 @@ app.post('/api/upload', requireAccess, async (req, res) => {
 // Prompt-Text.
 app.post('/api/generate-pair', requireAccess, async (req, res) => {
   try {
-    const { modelKey, promptStart, promptEnd, aspectRatio, resolution, references } = req.body || {};
+    const { modelKey, promptStart, promptEnd, aspectRatio, resolution, references, stylePrefix } = req.body || {};
     const model = findModel(modelKey);
     if (!model) return res.status(400).json({ error: 'Unbekanntes Modell.' });
     if (!promptStart || !promptStart.trim()) {
@@ -252,9 +262,11 @@ app.post('/api/generate-pair', requireAccess, async (req, res) => {
     const refs = Array.isArray(references) ? references.slice(0, model.maxReferenceImages) : [];
     const descriptor = buildReferenceDescriptor(refs);
     const refUrls = refs.map((r) => r.url).filter(Boolean);
+    const style = stylePrefix && stylePrefix.trim() ? stylePrefix.trim() : '';
 
     async function runVariant(promptText) {
-      const finalPrompt = descriptor ? `${descriptor}\n\n${promptText.trim()}` : promptText.trim();
+      const parts = [descriptor, style, promptText.trim()].filter(Boolean);
+      const finalPrompt = parts.join('\n\n');
       const payload = model.buildInput({
         prompt: finalPrompt,
         aspectRatio: aspectRatio || 'auto',
@@ -296,6 +308,68 @@ app.post('/api/generate-pair', requireAccess, async (req, res) => {
   } catch (err) {
     console.error('Generate-Pair-Fehler:', err);
     res.status(500).json({ error: 'Generierung fehlgeschlagen (Server-Fehler).' });
+  }
+});
+
+// Referenzbild von Claude als Bildgenerierungs-Prompt beschreiben lassen.
+app.post('/api/describe-image', requireAccess, async (req, res) => {
+  try {
+    if (!ANTHROPIC_API_KEY) {
+      return res.status(500).json({ error: 'ANTHROPIC_API_KEY ist auf dem Server nicht gesetzt.' });
+    }
+    const { base64Data, styleHint } = req.body || {};
+    if (!base64Data) return res.status(400).json({ error: 'Bild fehlt.' });
+
+    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(base64Data);
+    if (!match) return res.status(400).json({ error: 'Ungültiges Bildformat.' });
+    const [, mediaType, base64] = match;
+
+    const styleLine = styleHint && styleHint.trim()
+      ? styleHint.trim()
+      : 'düster-mystische Lichtstimmung, cineastisch, extrem realistische Gesichter und Ausdrücke, keine glatte "KI-Optik"';
+
+    const systemPrompt =
+      'Du bist ein erfahrener Prompt-Autor fuer KI-Bildgenerierung (u.a. Nano Banana Pro, Flux-2, GPT Image 2). ' +
+      'Beschreibe das hochgeladene Bild als einen einzigen, sehr detaillierten englischsprachigen Prompt: ' +
+      'Komposition, Personen (Ausdruck, Kleidung, Haltung), Hintergrund/Umgebung, Licht und Kamera/Objektiv-Look. ' +
+      `Gewuenschter Stil: ${styleLine}. ` +
+      'Antworte NUR mit dem fertigen Prompt-Text, ohne Einleitung, ohne Anfuehrungszeichen, ohne Markdown-Formatierung.';
+
+    const upstream = await fetch(ANTHROPIC_BASE, {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 700,
+        system: systemPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+              { type: 'text', text: 'Beschreibe dieses Bild als Bildgenerierungs-Prompt.' },
+            ],
+          },
+        ],
+      }),
+    });
+    const data = await upstream.json();
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ error: data.error?.message || 'Claude-Anfrage fehlgeschlagen.' });
+    }
+    const text = (data.content || [])
+      .filter((block) => block.type === 'text')
+      .map((block) => block.text)
+      .join('\n')
+      .trim();
+    res.json({ prompt: text });
+  } catch (err) {
+    console.error('Describe-Image-Fehler:', err);
+    res.status(500).json({ error: 'Bildbeschreibung fehlgeschlagen (Server-Fehler).' });
   }
 });
 

@@ -16,6 +16,32 @@ vermutlich zusätzlich an CORS scheitern. Der Server in diesem Projekt ist
 daher ein dünner Proxy: Er nimmt Anfragen vom Browser entgegen, hängt den
 Key aus einer Umgebungsvariable an und leitet an `api.kie.ai` weiter.
 
+## Neu: Prompt aus Referenzbild (Claude) & Projekte
+
+- **Prompt aus Referenzbild:** Bild hochladen, Claude beschreibt es als
+  fertigen, englischsprachigen Bildgenerierungs-Prompt (cineastisch,
+  photorealistisch, im gewählten Projekt-Stil). Braucht einen eigenen
+  Anthropic-API-Key (siehe unten) — ohne den Key bleibt dieser Abschnitt
+  im Interface einfach ausgeblendet, der Rest funktioniert normal weiter.
+- **Projekte:** Modell, Seitenverhältnis, Auflösung und ein frei
+  formulierter Stil-Text ("Grundstimmung") lassen sich unter einem Namen
+  speichern. Der Stil-Text wird automatisch jedem Start-/End-Prompt
+  vorangestellt und dient als Vorgabe für die Bildbeschreibung. Projekte
+  liegen — wie der Verlauf — nur lokal im Browser (`localStorage`), nicht
+  auf dem Server. Anderes Gerät = keine gespeicherten Projekte.
+
+### Anthropic-API-Key einrichten
+
+1. Auf [console.anthropic.com](https://console.anthropic.com) ein Konto
+   anlegen (getrennt von einem normalen Claude.ai-Zugang) und einen
+   API-Key erzeugen.
+2. Bei Render unter **Environment** eine neue Variable `ANTHROPIC_API_KEY`
+   mit diesem Key anlegen, dann "Save, rebuild, and deploy".
+3. Abrechnung erfolgt nutzungsbasiert (nicht über ein Claude.ai-Abo) —
+   eine Bildbeschreibung kostet üblicherweise Bruchteile eines Cents bis
+   wenige Cent. Aktuelle Preise: [anthropic.com/pricing](https://anthropic.com/pricing).
+   Neue Konten erhalten in der Regel ein kleines Startguthaben.
+
 ## Lokal starten
 
 ```bash
