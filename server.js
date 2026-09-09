@@ -154,22 +154,48 @@ const MODELS = [
     },
   },
   {
-    key: 'gpt-image-2',
-    label: 'GPT Image 2',
+    // GPT Image 2.5 wurde von OpenAI erst am 8. September 2026 veroeffentlicht
+    // (Flare = schnell/Standard, Sunburst = Praezisions-Editing). Kie.ai
+    // fuehrt beide bereits in der Doku-Uebersicht, die exakte Parameterform
+    // war zum Zeitpunkt dieser Aenderung aber noch nicht vollstaendig
+    // ueberpruefbar - Modell-String/Felder ggf. an der echten Kie.ai-Antwort
+    // nachjustieren, falls ein Fehler wie "model not found" zurueckkommt.
+    key: 'gpt-image-2.5-flare',
+    label: 'GPT Image 2.5 Flare',
     vendor: 'OpenAI',
-    blurb: 'Vielseitig einsetzbar – gut fuer Illustrationen, Icons und Bildvarianten (bis zu 4 Referenzbilder, ungefaehr).',
+    blurb: 'Nachfolger von GPT Image 2 – spuerbar schneller bei gleichem Preis, Standardwahl fuer die meisten Bilder. (Sehr neues Modell, Stand 09/2026.)',
     maxReferenceImages: 4,
     supportsResolution: false,
     buildInput(ctx) {
       if (ctx.referenceImageUrls.length > 0) {
         return {
-          model: 'gpt-image-2-image-to-image',
-          input: { prompt: ctx.prompt, input_urls: ctx.referenceImageUrls, aspect_ratio: ctx.aspectRatio },
+          model: 'gpt-image-2.5-flare-image-to-image',
+          input: { prompt: ctx.prompt, input_urls: ctx.referenceImageUrls, aspect_ratio: ctx.aspectRatio, quality: 'high' },
         };
       }
       return {
-        model: 'gpt-image-2-text-to-image',
-        input: { prompt: ctx.prompt, aspect_ratio: ctx.aspectRatio },
+        model: 'gpt-image-2.5-flare-text-to-image',
+        input: { prompt: ctx.prompt, aspect_ratio: ctx.aspectRatio, quality: 'high' },
+      };
+    },
+  },
+  {
+    key: 'gpt-image-2.5-sunburst',
+    label: 'GPT Image 2.5 Sunburst',
+    vendor: 'OpenAI',
+    blurb: 'Praezisions-Variante fuer kontrollierte Bearbeitungen (z.B. "nur die Jacke aendern, Rest exakt beibehalten"), etwas langsamer als Flare. (Sehr neues Modell, Stand 09/2026.)',
+    maxReferenceImages: 4,
+    supportsResolution: false,
+    buildInput(ctx) {
+      if (ctx.referenceImageUrls.length > 0) {
+        return {
+          model: 'gpt-image-2.5-sunburst-image-to-image',
+          input: { prompt: ctx.prompt, input_urls: ctx.referenceImageUrls, aspect_ratio: ctx.aspectRatio, quality: 'high' },
+        };
+      }
+      return {
+        model: 'gpt-image-2.5-sunburst-text-to-image',
+        input: { prompt: ctx.prompt, aspect_ratio: ctx.aspectRatio, quality: 'high' },
       };
     },
   },
