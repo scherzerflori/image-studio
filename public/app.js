@@ -3,11 +3,20 @@
 // eigenen Server (/api/...), niemals direkt mit api.kie.ai.
 
 const HISTORY_KEY = 'kis_history';
+const VIDEO_HISTORY_KEY = 'kis_video_history';
 const PASSWORD_KEY = 'kis_password';
 const PROJECTS_KEY = 'kis_projects';
 const LAST_PROJECT_KEY = 'kis_last_project';
 const CUSTOM_STYLE_KEY = 'kis_custom_style_entries';
+const LIBRARY_KEY = 'kis_library';
 const MAX_HISTORY = 40;
+const MAX_VIDEO_HISTORY = 30;
+
+const LIBRARY_CATEGORIES = [
+  { key: 'character', label: 'Charaktere', refCategory: 'person', hasName: true },
+  { key: 'landscape', label: 'Landschaften/Hintergründe', refCategory: 'background', hasName: false },
+  { key: 'object', label: 'Gegenstände', refCategory: 'object', hasName: false },
+];
 
 let MODELS = [];
 let ASPECT_RATIOS = [];
@@ -22,6 +31,15 @@ let pendingUpload = null; // { category, index }
 let describeImageBase64 = null;
 let describeFileName = null;
 let lastFocusedPromptField = 'start'; // 'start' | 'end' – Ziel für "→ Einfügen"
+
+// Video
+let VIDEO_MODELS = [];
+let VIDEO_ASPECT_RATIOS = [];
+let currentVideoModel = null;
+let videoStartFrame = null; // { url, previewUrl }
+let videoEndFrame = null; // { url, previewUrl }
+let videoBusyCount = 0;
+let libraryPendingUpload = null; // { categoryKey }
 
 // Feste Bildsprache-Bausteine: Deutsches Label fürs Dropdown, englische
 // Formulierung, die tatsächlich in den Prompt eingefügt wird. Bei den
@@ -140,7 +158,11 @@ document.addEventListener('DOMContentLoaded', () => {
   wireDescribe();
   wireKeepFilter();
   wirePromptFocusTracking();
+  wireModeTabs();
+  wireLibrary();
+  wireVideoPanel();
   renderStyleSections();
+  renderLibrarySections();
   sharedFileInput.addEventListener('change', handleSharedFileChange);
   boot();
 });
@@ -151,6 +173,7 @@ async function boot() {
     $('#login-overlay').classList.add('hidden');
     $('#app').classList.remove('hidden');
     hydrateHistory();
+    hydrateVideoHistory();
   } else {
     $('#login-overlay').classList.remove('hidden');
   }
@@ -166,7 +189,10 @@ async function loadModels() {
     RESOLUTIONS = data.resolutions;
     REFERENCE_CATEGORIES = data.referenceCategories;
     DESCRIBE_ENABLED = !!data.describeEnabled;
+    VIDEO_MODELS = data.videoModels || [];
+    VIDEO_ASPECT_RATIOS = data.videoAspectRatios || [];
     $('#describe-section').classList.toggle('hidden', !DESCRIBE_ENABLED);
+    $('#video-describe-section').classList.toggle('hidden', !DESCRIBE_ENABLED);
     initRefState();
     populateModelSelect();
     populateAspectRatios();
@@ -174,6 +200,8 @@ async function loadModels() {
     renderReferenceSections();
     updateRefStatus();
     populateProjectSelect();
+    populateVideoModelSelect();
+    populateVideoAspectRatios();
     return true;
   } catch (err) {
     console.error(err);
@@ -859,12 +887,781 @@ function renderStyleSections() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Bibliothek: Charaktere / Landschaften / Gegenstände (dauerhaft, localStorage)
+// ---------------------------------------------------------------------------
+
+const libraryFileInput = document.createElement('input');
+libraryFileInput.type = 'file';
+libraryFileInput.accept = 'image/png,image/jpeg,image/webp';
+libraryFileInput.hidden = true;
+document.body.appendChild(libraryFileInput);
+
+function readLibrary() {
+  try {
+    return JSON.parse(localStorage.getItem(LIBRARY_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function writeLibrary(obj) {
+  localStorage.setItem(LIBRARY_KEY, JSON.stringify(obj));
+}
+
+function wireLibrary() {
+  libraryFileInput.addEventListener('change', async () => {
+    const file = libraryFileInput.files[0];
+    const categoryKey = libraryPendingUpload;
+    libraryPendingUpload = null;
+    if (!file || !categoryKey) return;
+
+    const catMeta = LIBRARY_CATEGORIES.find((c) => c.key === categoryKey);
+    const name = prompt(catMeta.hasName ? 'Name der Figur:' : `Kurzer Name (${catMeta.label}):`);
+    if (!name || !name.trim()) return;
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+      const lib = readLibrary();
+      if (!lib[categoryKey]) lib[categoryKey] = [];
+      const entry = { id: generateId(), name: name.trim(), description: '', url: null, previewUrl: dataUrl, status: 'uploading' };
+      lib[categoryKey].push(entry);
+      writeLibrary(lib);
+      renderLibrarySections();
+
+      try {
+        const url = await uploadBase64ToKie(dataUrl, file.name);
+        const lib2 = readLibrary();
+        const e2 = (lib2[categoryKey] || []).find((x) => x.id === entry.id);
+        if (e2) {
+          e2.url = url;
+          e2.status = 'done';
+          writeLibrary(lib2);
+        }
+      } catch (err) {
+        const lib2 = readLibrary();
+        const e2 = (lib2[categoryKey] || []).find((x) => x.id === entry.id);
+        if (e2) {
+          e2.status = 'error';
+          writeLibrary(lib2);
+        }
+      }
+      renderLibrarySections();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function generateLibraryDescription(categoryKey, entryId) {
+  const lib = readLibrary();
+  const entry = (lib[categoryKey] || []).find((e) => e.id === entryId);
+  if (!entry || !entry.previewUrl || !DESCRIBE_ENABLED) return;
+  const catMeta = LIBRARY_CATEGORIES.find((c) => c.key === categoryKey);
+  const ideaText =
+    categoryKey === 'character'
+      ? `Beschreibe diese Person prägnant und stichpunktartig für die Wiederverwendung in künftigen Bild-/Video-Prompts (Aussehen, Kleidung, markante Merkmale) – kein Name, keine Handlung.`
+      : `Beschreibe dieses/diese ${catMeta.label} prägnant und stichpunktartig für die Wiederverwendung in künftigen Bild-/Video-Prompts.`;
+  try {
+    const res = await fetch('/api/generate-prompt', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ base64Data: entry.previewUrl, ideaText, styleHint: '' }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Beschreibung fehlgeschlagen.');
+    const lib2 = readLibrary();
+    const e2 = (lib2[categoryKey] || []).find((e) => e.id === entryId);
+    if (e2) {
+      e2.description = data.prompt;
+      writeLibrary(lib2);
+      renderLibrarySections();
+    }
+  } catch (err) {
+    alert(err.message || 'Beschreibung fehlgeschlagen.');
+  }
+}
+
+function useLibraryEntry(categoryKey, entryId) {
+  const lib = readLibrary();
+  const entry = (lib[categoryKey] || []).find((e) => e.id === entryId);
+  if (!entry || entry.status !== 'done') return;
+  const catMeta = LIBRARY_CATEGORIES.find((c) => c.key === categoryKey);
+  const refCat = catMeta.refCategory;
+
+  const slots = refState[refCat];
+  const emptyIdx = slots.findIndex((s) => s.status === 'empty');
+  if (emptyIdx === -1) {
+    alert(`Alle Referenz-Plätze für "${catMeta.label}" sind belegt. Erst einen Platz leeren.`);
+  } else {
+    slots[emptyIdx] = { name: catMeta.hasName ? entry.name : '', url: entry.url, previewUrl: entry.previewUrl, status: 'done' };
+    renderReferenceSections();
+    updateRefStatus();
+  }
+  if (entry.description) insertStylePhrase(entry.description);
+}
+
+function deleteLibraryEntry(categoryKey, entryId) {
+  if (!confirm('Diesen Bibliothekseintrag wirklich löschen?')) return;
+  const lib = readLibrary();
+  lib[categoryKey] = (lib[categoryKey] || []).filter((e) => e.id !== entryId);
+  writeLibrary(lib);
+  renderLibrarySections();
+}
+
+function renderLibrarySections() {
+  const container = $('#library-sections');
+  if (!container) return;
+  container.innerHTML = '';
+  const lib = readLibrary();
+
+  LIBRARY_CATEGORIES.forEach((cat) => {
+    const section = document.createElement('div');
+    section.className = 'ref-category';
+
+    const label = document.createElement('div');
+    label.className = 'ref-category-label';
+    label.textContent = cat.label;
+    section.appendChild(label);
+
+    const list = document.createElement('div');
+    list.className = 'library-list';
+
+    (lib[cat.key] || []).forEach((entry) => {
+      const item = document.createElement('div');
+      item.className = 'library-item';
+
+      const tile = document.createElement('div');
+      tile.className = 'library-item-tile';
+      tile.title = entry.description ? entry.description : 'Klicken zum Verwenden';
+      if (entry.previewUrl) {
+        const img = document.createElement('img');
+        img.src = entry.previewUrl;
+        tile.appendChild(img);
+      }
+      if (entry.status === 'done') {
+        tile.addEventListener('click', () => useLibraryEntry(cat.key, entry.id));
+      }
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'library-item-remove';
+      removeBtn.type = 'button';
+      removeBtn.textContent = '×';
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteLibraryEntry(cat.key, entry.id);
+      });
+      tile.appendChild(removeBtn);
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'library-item-name';
+      nameEl.textContent = entry.status === 'uploading' ? `${entry.name} …` : entry.status === 'error' ? `${entry.name} ✕` : entry.name;
+
+      item.appendChild(tile);
+      item.appendChild(nameEl);
+
+      if (DESCRIBE_ENABLED && entry.status === 'done' && !entry.description) {
+        const genBtn = document.createElement('button');
+        genBtn.className = 'library-item-remove';
+        genBtn.style.cssText = 'position:static;width:auto;height:auto;border-radius:3px;font-size:9px;padding:1px 4px;background:var(--panel-alt);color:var(--text-faint);';
+        genBtn.type = 'button';
+        genBtn.textContent = '✎ Beschreiben';
+        genBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          generateLibraryDescription(cat.key, entry.id);
+        });
+        item.appendChild(genBtn);
+      }
+
+      list.appendChild(item);
+    });
+
+    const addTile = document.createElement('div');
+    addTile.className = 'library-add-tile';
+    addTile.textContent = '+';
+    addTile.title = `${cat.label} hinzufügen`;
+    addTile.addEventListener('click', () => {
+      libraryPendingUpload = cat.key;
+      libraryFileInput.value = '';
+      libraryFileInput.click();
+    });
+    list.appendChild(addTile);
+
+    section.appendChild(list);
+    container.appendChild(section);
+  });
+}
+
 function wireRefClearAll() {
   $('#ref-clear-all').addEventListener('click', () => {
     initRefState();
     renderReferenceSections();
     updateRefStatus();
   });
+}
+
+// ---------------------------------------------------------------------------
+// Modus-Tabs (Bild / Video)
+// ---------------------------------------------------------------------------
+
+function wireModeTabs() {
+  $('#mode-tab-image').addEventListener('click', () => setMode('image'));
+  $('#mode-tab-video').addEventListener('click', () => setMode('video'));
+}
+
+function setMode(mode) {
+  $('#mode-tab-image').classList.toggle('active', mode === 'image');
+  $('#mode-tab-video').classList.toggle('active', mode === 'video');
+  $('#image-panel').classList.toggle('hidden', mode !== 'image');
+  $('#video-panel').classList.toggle('hidden', mode !== 'video');
+}
+
+// ---------------------------------------------------------------------------
+// Video: Modell / Seitenverhältnis / Dauer
+// ---------------------------------------------------------------------------
+
+function populateVideoModelSelect() {
+  const sel = $('#video-model-select');
+  if (!VIDEO_MODELS.length) return;
+  sel.innerHTML = '';
+  VIDEO_MODELS.forEach((m) => {
+    const opt = document.createElement('option');
+    opt.value = m.key;
+    opt.textContent = `${m.label} — ${m.vendor}`;
+    sel.appendChild(opt);
+  });
+  sel.value = VIDEO_MODELS[0].key;
+  applyVideoModel(VIDEO_MODELS[0]);
+  sel.addEventListener('change', (e) => {
+    applyVideoModel(VIDEO_MODELS.find((m) => m.key === e.target.value));
+  });
+}
+
+function populateVideoAspectRatios() {
+  const sel = $('#video-aspect-ratio');
+  sel.innerHTML = '';
+  VIDEO_ASPECT_RATIOS.forEach((r) => {
+    const opt = document.createElement('option');
+    opt.value = r.value;
+    opt.textContent = r.label;
+    sel.appendChild(opt);
+  });
+}
+
+function applyVideoModel(model) {
+  currentVideoModel = model;
+  $('#video-model-blurb').textContent = model.blurb;
+  $('#video-end-wrap').classList.toggle('hidden', !model.supportsStartEnd);
+  $('#video-elements-section').classList.toggle('hidden', !model.supportsElements);
+  $('#video-generate-audio').closest('label').classList.toggle('hidden', !model.supportsAudio);
+
+  const durSel = $('#video-duration');
+  durSel.innerHTML = '';
+  model.durations.forEach((d) => {
+    const opt = document.createElement('option');
+    opt.value = d;
+    opt.textContent = `${d}s`;
+    durSel.appendChild(opt);
+  });
+
+  if (model.supportsElements) renderVideoElementsList();
+}
+
+// ---------------------------------------------------------------------------
+// Video: Start-/Endbild-Frames
+// ---------------------------------------------------------------------------
+
+const videoFrameFileInput = document.createElement('input');
+videoFrameFileInput.type = 'file';
+videoFrameFileInput.accept = 'image/png,image/jpeg,image/webp';
+videoFrameFileInput.hidden = true;
+document.body.appendChild(videoFrameFileInput);
+let videoFramePendingRole = null;
+
+function renderVideoFrameTile(role) {
+  const tile = $(role === 'start' ? '#video-start-tile' : '#video-end-tile');
+  const clearBtn = $(role === 'start' ? '#video-start-clear' : '#video-end-clear');
+  const frame = role === 'start' ? videoStartFrame : videoEndFrame;
+  tile.innerHTML = '';
+  if (frame && frame.previewUrl) {
+    const img = document.createElement('img');
+    img.src = frame.previewUrl;
+    tile.appendChild(img);
+    tile.classList.add('filled');
+    clearBtn.classList.remove('hidden');
+  } else {
+    const hint = document.createElement('span');
+    hint.className = 'video-frame-hint';
+    hint.textContent = frame && frame.status === 'uploading' ? 'lädt hoch …' : 'Bild wählen';
+    tile.appendChild(hint);
+    tile.classList.remove('filled');
+    clearBtn.classList.add('hidden');
+  }
+}
+
+function setVideoFrameFromUrl(role, url) {
+  const frame = { previewUrl: url, url, status: 'done' };
+  if (role === 'start') videoStartFrame = frame;
+  else videoEndFrame = frame;
+  renderVideoFrameTile(role);
+}
+
+function wireVideoPanel() {
+  $('#video-start-tile').addEventListener('click', () => {
+    if (videoStartFrame) return;
+    videoFramePendingRole = 'start';
+    videoFrameFileInput.value = '';
+    videoFrameFileInput.click();
+  });
+  $('#video-end-tile').addEventListener('click', () => {
+    if (videoEndFrame) return;
+    videoFramePendingRole = 'end';
+    videoFrameFileInput.value = '';
+    videoFrameFileInput.click();
+  });
+  $('#video-start-clear').addEventListener('click', () => {
+    videoStartFrame = null;
+    renderVideoFrameTile('start');
+  });
+  $('#video-end-clear').addEventListener('click', () => {
+    videoEndFrame = null;
+    renderVideoFrameTile('end');
+  });
+
+  videoFrameFileInput.addEventListener('change', () => {
+    const file = videoFrameFileInput.files[0];
+    const role = videoFramePendingRole;
+    videoFramePendingRole = null;
+    if (!file || !role) return;
+
+    const frame = { previewUrl: null, url: null, status: 'uploading' };
+    if (role === 'start') videoStartFrame = frame;
+    else videoEndFrame = frame;
+    renderVideoFrameTile(role);
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      frame.previewUrl = reader.result;
+      renderVideoFrameTile(role);
+      try {
+        frame.url = await uploadBase64ToKie(reader.result, file.name);
+        frame.status = 'done';
+      } catch (err) {
+        frame.status = 'error';
+      }
+      renderVideoFrameTile(role);
+    };
+    reader.readAsDataURL(file);
+  });
+
+  $('#video-describe-btn').addEventListener('click', requestVideoPrompt);
+  $('#video-describe-use').addEventListener('click', () => {
+    const text = $('#video-describe-output').value;
+    if (!text) return;
+    const target = $('#video-prompt');
+    if (target.value.trim() && !confirm('Vorhandenen Video-Prompt ersetzen?')) return;
+    target.value = text;
+  });
+
+  $('#video-generate-btn').addEventListener('click', startVideoGeneration);
+}
+
+// ---------------------------------------------------------------------------
+// Video: Elemente aus der Bibliothek (Charaktere/Gegenstände)
+// ---------------------------------------------------------------------------
+
+function renderVideoElementsList() {
+  const container = $('#video-elements-list');
+  if (!container) return;
+  container.innerHTML = '';
+  const lib = readLibrary();
+  ['character', 'object'].forEach((catKey) => {
+    (lib[catKey] || []).forEach((entry) => {
+      if (entry.status !== 'done') return;
+      const label = document.createElement('label');
+      label.className = 'describe-checkbox';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = `${catKey}:${entry.id}`;
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(` ${entry.name} (@${slugifyElementName(entry.name)})`));
+      container.appendChild(label);
+    });
+  });
+  if (!container.children.length) {
+    const p = document.createElement('p');
+    p.className = 'field-hint';
+    p.textContent = 'Noch keine Charaktere/Gegenstände in der Bibliothek.';
+    container.appendChild(p);
+  }
+}
+
+function slugifyElementName(name) {
+  return (name || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'element';
+}
+
+function getSelectedVideoElements() {
+  const lib = readLibrary();
+  const out = [];
+  $('#video-elements-list').querySelectorAll('input[type=checkbox]:checked').forEach((cb) => {
+    const [catKey, id] = cb.value.split(':');
+    const entry = (lib[catKey] || []).find((e) => e.id === id);
+    if (entry && entry.url) {
+      out.push({ name: slugifyElementName(entry.name), description: entry.description || entry.name, url: entry.url });
+    }
+  });
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Video: Claude-Prompt-Generator
+// ---------------------------------------------------------------------------
+
+async function requestVideoPrompt() {
+  const btn = $('#video-describe-btn');
+  const ideaText = $('#video-describe-idea').value;
+  if (!ideaText.trim() && !videoStartFrame && !videoEndFrame) {
+    alert('Bitte ein Startbild setzen oder eine Idee eintippen.');
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'wird erstellt …';
+  try {
+    const res = await fetch('/api/generate-video-prompt', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        startImage: videoStartFrame ? videoStartFrame.previewUrl || videoStartFrame.url : null,
+        endImage: videoEndFrame ? videoEndFrame.previewUrl || videoEndFrame.url : null,
+        ideaText,
+        styleHint: getProjectStyleText(),
+        duration: $('#video-duration').value,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Video-Prompt-Erstellung fehlgeschlagen.');
+    $('#video-describe-output').value = data.prompt;
+    $('#video-describe-result').classList.remove('hidden');
+  } catch (err) {
+    console.error(err);
+    alert(err.message || 'Video-Prompt-Erstellung fehlgeschlagen.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Prompt erstellen';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Video: Generierung, Polling, Ergebniskarten, Verlauf
+// ---------------------------------------------------------------------------
+
+function setVideoStatus(text) {
+  const el = $('#topbar-status');
+  el.textContent = text;
+}
+
+function buildVideoCardShell(modelLabel, prompt) {
+  const card = document.createElement('div');
+  card.className = 'card';
+
+  const media = document.createElement('div');
+  media.className = 'video-card-media';
+  const fill = document.createElement('div');
+  fill.className = 'developing-fill';
+  const statusLabel = document.createElement('div');
+  statusLabel.className = 'slot-status-label';
+  statusLabel.textContent = 'wird gerendert …';
+  media.appendChild(fill);
+  media.appendChild(statusLabel);
+  card.appendChild(media);
+
+  const meta = document.createElement('div');
+  meta.className = 'card-meta';
+  meta.innerHTML = `<span>🎬 ${escapeHtml(modelLabel)}</span>`;
+  card.appendChild(meta);
+
+  const promptBox = document.createElement('div');
+  promptBox.className = 'card-prompt';
+  const line = document.createElement('div');
+  line.className = 'prompt-line';
+  line.textContent = prompt;
+  promptBox.appendChild(line);
+  card.appendChild(promptBox);
+
+  const actions = document.createElement('div');
+  actions.className = 'slot-actions hidden';
+  card.appendChild(actions);
+
+  return { card, media, fill, statusLabel, actions };
+}
+
+function finishVideoDone(refs, url, entry) {
+  refs.fill.remove();
+  refs.statusLabel.remove();
+  const video = document.createElement('video');
+  video.src = url;
+  video.controls = true;
+  video.loop = true;
+  video.playsInline = true;
+  refs.media.appendChild(video);
+
+  refs.actions.classList.remove('hidden');
+
+  const keepBtn = document.createElement('button');
+  keepBtn.className = 'slot-keep';
+  keepBtn.type = 'button';
+  const paintKeep = () => {
+    keepBtn.textContent = entry.kept ? '★ behalten' : '☆ behalten';
+    keepBtn.classList.toggle('kept', entry.kept);
+  };
+  paintKeep();
+  keepBtn.addEventListener('click', () => {
+    entry.kept = !entry.kept;
+    paintKeep();
+    upsertVideoHistory(entry);
+    refs.card.classList.toggle('card-kept', entry.kept);
+    applyKeepFilter();
+  });
+  refs.actions.appendChild(keepBtn);
+  if (entry.kept) refs.card.classList.add('card-kept');
+
+  const dl = document.createElement('button');
+  dl.type = 'button';
+  dl.className = 'slot-download';
+  dl.textContent = '↓ Video';
+  dl.addEventListener('click', async () => {
+    const filename = buildVideoFileName(entry, url);
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('fetch fehlgeschlagen');
+      const blob = await resp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    } catch (err) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+  });
+  refs.actions.appendChild(dl);
+
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'slot-copy';
+  copyBtn.type = 'button';
+  copyBtn.textContent = '⎘ Prompt';
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(entry.prompt || '');
+      copyBtn.textContent = 'kopiert!';
+    } catch (err) {
+      copyBtn.textContent = 'geht nicht';
+    }
+    setTimeout(() => (copyBtn.textContent = '⎘ Prompt'), 1500);
+  });
+  refs.actions.appendChild(copyBtn);
+}
+
+function finishVideoError(refs, message) {
+  refs.statusLabel.classList.add('is-error');
+  refs.statusLabel.textContent = message;
+}
+
+function buildVideoFileName(entry, url) {
+  const d = new Date(entry.createdAt || Date.now());
+  const yy = String(d.getFullYear() % 100).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const project = sanitizeSlug(entry.projectName || 'OhneProjekt');
+  const keyword = sanitizeSlug(entry.slug || deriveSlugFromPrompt(entry.prompt));
+  const ratio = (entry.aspectRatio || '16:9').replace(/:/g, 'zu');
+  const model = entry.modelKey === 'kling-3' ? 'Kling3' : entry.modelKey === 'seedance-2-fast' ? 'Seedance2' : sanitizeSlug(entry.modelLabel || 'Video');
+  const ext = guessExtension(url) === 'png' ? 'mp4' : guessExtension(url);
+  return `${yy}${mm}${dd}_${project}_${keyword}_${ratio}_${model}.${ext}`;
+}
+
+async function startVideoGeneration() {
+  const prompt = $('#video-prompt').value.trim();
+  const errorEl = $('#video-generate-error');
+  errorEl.classList.add('hidden');
+  if (!prompt) {
+    errorEl.textContent = 'Bitte einen Prompt eingeben.';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+  if (!currentVideoModel) return;
+
+  const aspectRatio = $('#video-aspect-ratio').value;
+  const duration = $('#video-duration').value;
+  const generateAudio = $('#video-generate-audio').checked;
+  const elements = currentVideoModel.supportsElements ? getSelectedVideoElements() : [];
+  const referenceImageUrls =
+    !currentVideoModel.supportsStartEnd && !currentVideoModel.supportsElements && videoStartFrame && videoStartFrame.url
+      ? [videoStartFrame.url]
+      : [];
+
+  const btn = $('#video-generate-btn');
+  btn.disabled = true;
+
+  const { card, media, fill, statusLabel, actions } = buildVideoCardShell(currentVideoModel.label, prompt);
+  const refs = { card, media, fill, statusLabel, actions };
+  $('#results-grid').prepend(card);
+  applyKeepFilter();
+
+  const entry = {
+    id: generateId(),
+    modelKey: currentVideoModel.key,
+    modelLabel: currentVideoModel.label,
+    projectName: currentProjectName || null,
+    aspectRatio,
+    duration,
+    prompt,
+    slug: null,
+    videoUrl: null,
+    kept: false,
+    createdAt: Date.now(),
+  };
+
+  try {
+    const res = await fetch('/api/generate-video', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        modelKey: currentVideoModel.key,
+        prompt,
+        aspectRatio,
+        duration,
+        generateAudio,
+        startImageUrl: videoStartFrame && videoStartFrame.url ? videoStartFrame.url : null,
+        endImageUrl: videoEndFrame && videoEndFrame.url ? videoEndFrame.url : null,
+        referenceImageUrls,
+        elements,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Video-Generierung fehlgeschlagen.');
+
+    btn.disabled = false;
+    videoBusyCount++;
+    setVideoStatus(`Video wird gerendert … (${videoBusyCount})`);
+
+    pollVideoTask(data.taskId, refs, entry);
+  } catch (err) {
+    console.error(err);
+    finishVideoError(refs, err.message || 'Unbekannter Fehler.');
+    btn.disabled = false;
+    errorEl.textContent = err.message || 'Video-Generierung fehlgeschlagen.';
+    errorEl.classList.remove('hidden');
+  }
+}
+
+function pollVideoTask(taskId, refs, entry) {
+  let delay = 4000;
+  let elapsed = 0;
+  const maxElapsed = 12 * 60 * 1000; // Videos brauchen deutlich laenger als Bilder
+  let failures = 0;
+
+  async function tick() {
+    try {
+      const res = await fetch(`/api/status/${taskId}`, { headers: authHeaders() });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Status unbekannt.');
+      failures = 0;
+
+      if (data.state === 'success') {
+        const url = data.resultUrls?.[0];
+        if (url) {
+          entry.videoUrl = url;
+          finishVideoDone(refs, url, entry);
+          upsertVideoHistory(entry);
+        } else {
+          finishVideoError(refs, 'Fertig gemeldet, aber keine Video-URL erhalten.');
+        }
+        settle();
+        return;
+      }
+      if (data.state === 'fail') {
+        finishVideoError(refs, data.failMsg || 'Task fehlgeschlagen.');
+        settle();
+        return;
+      }
+
+      const pct = typeof data.progress === 'number' ? Math.min(Math.max(data.progress, 5), 95) : Math.min(elapsed / 4000, 90);
+      refs.fill.style.height = `${pct}%`;
+      refs.statusLabel.textContent =
+        typeof data.progress === 'number' ? `wird gerendert … ${data.progress}%` : 'wird gerendert …';
+
+      elapsed += delay;
+      if (elapsed > maxElapsed) {
+        finishVideoError(refs, `Zeitüberschreitung. Task-ID: ${taskId}`);
+        settle();
+        return;
+      }
+      delay = Math.min(delay * 1.15, 10000);
+      setTimeout(tick, delay);
+    } catch (err) {
+      failures++;
+      if (failures > 5) {
+        finishVideoError(refs, 'Verbindung zum Server verloren.');
+        settle();
+        return;
+      }
+      setTimeout(tick, 6000);
+    }
+  }
+
+  function settle() {
+    videoBusyCount = Math.max(0, videoBusyCount - 1);
+    setVideoStatus(videoBusyCount > 0 ? `Video wird gerendert … (${videoBusyCount})` : 'bereit');
+  }
+
+  setTimeout(tick, delay);
+}
+
+function readVideoHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(VIDEO_HISTORY_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function upsertVideoHistory(entry) {
+  if (!entry.videoUrl) return;
+  const list = readVideoHistory();
+  const idx = list.findIndex((e) => e.id === entry.id);
+  if (idx >= 0) list[idx] = entry;
+  else list.unshift(entry);
+  const kept = list.filter((e) => e.kept);
+  const rest = list.filter((e) => !e.kept);
+  const trimmed = rest.slice(0, Math.max(0, MAX_VIDEO_HISTORY - kept.length));
+  const merged = [...kept, ...trimmed].sort((a, b) => b.createdAt - a.createdAt);
+  localStorage.setItem(VIDEO_HISTORY_KEY, JSON.stringify(merged));
+}
+
+function hydrateVideoHistory() {
+  readVideoHistory().forEach((entry) => {
+    const { card, media, fill, statusLabel, actions } = buildVideoCardShell(entry.modelLabel, entry.prompt);
+    const refs = { card, media, fill, statusLabel, actions };
+    if (entry.videoUrl) finishVideoDone(refs, entry.videoUrl, entry);
+    $('#results-grid').appendChild(card);
+  });
+  applyKeepFilter();
 }
 
 function populateUseRefSelect(select) {
@@ -1047,6 +1844,16 @@ function finishSlotDone(slotRefs, url, entry, role) {
     select.value = '';
   });
   slotRefs.actions.appendChild(select);
+
+  const videoSelect = document.createElement('select');
+  videoSelect.className = 'slot-use-ref';
+  videoSelect.innerHTML = '<option value="">🎬 Video…</option><option value="vstart">als Video-Startbild</option><option value="vend">als Video-Endbild</option>';
+  videoSelect.addEventListener('change', () => {
+    if (videoSelect.value === 'vstart') setVideoFrameFromUrl('start', url);
+    else if (videoSelect.value === 'vend') setVideoFrameFromUrl('end', url);
+    videoSelect.value = '';
+  });
+  slotRefs.actions.appendChild(videoSelect);
 
   if (entry && role && DESCRIBE_ENABLED) {
     const checkBtn = document.createElement('button');

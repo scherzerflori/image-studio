@@ -53,6 +53,19 @@
       </section>
 
       <section class="field">
+        <label class="field-label">Bibliothek <span class="field-label-muted">(Charaktere, Landschaften, Gegenstände)</span></label>
+        <p class="field-hint">Dauerhaft gespeichert. "→ Verwenden" belegt automatisch den passenden Referenz-Platz (Bild) und trägt die Beschreibung in den zuletzt aktiven Prompt ein.</p>
+        <div id="library-sections"></div>
+      </section>
+
+      <div class="mode-tabs">
+        <button type="button" class="mode-tab active" id="mode-tab-image">🖼 Bild</button>
+        <button type="button" class="mode-tab" id="mode-tab-video">🎬 Video</button>
+      </div>
+
+      <div id="image-panel">
+
+      <section class="field">
         <label class="field-label">Modell</label>
         <select id="model-select"></select>
         <p id="model-blurb" class="field-hint"></p>
@@ -119,6 +132,79 @@
       </button>
 
       <p id="generate-error" class="generate-error hidden"></p>
+
+      </div>
+
+      <div id="video-panel" class="hidden">
+
+        <section class="field">
+          <label class="field-label">Video-Modell</label>
+          <select id="video-model-select"></select>
+          <p id="video-model-blurb" class="field-hint"></p>
+        </section>
+
+        <section class="field field-row">
+          <div>
+            <label class="field-label">Startbild</label>
+            <div id="video-start-tile" class="describe-tile video-frame-tile">
+              <span class="video-frame-hint">Bild wählen</span>
+            </div>
+            <button type="button" id="video-start-clear" class="ref-clear-all hidden">Entfernen</button>
+          </div>
+          <div id="video-end-wrap">
+            <label class="field-label">Endbild <span class="field-label-muted">(optional)</span></label>
+            <div id="video-end-tile" class="describe-tile video-frame-tile">
+              <span class="video-frame-hint">Bild wählen</span>
+            </div>
+            <button type="button" id="video-end-clear" class="ref-clear-all hidden">Entfernen</button>
+          </div>
+        </section>
+        <p class="field-hint">Auf jedem fertigen Bild im Ergebnisbereich gibt es "🎬 Video…" — damit landet es direkt hier als Start- oder Endbild.</p>
+
+        <section id="video-elements-section" class="field hidden">
+          <label class="field-label">Elemente aus Bibliothek <span class="field-label-muted">(Charaktere/Gegenstände)</span></label>
+          <p class="field-hint">Ausgewählte Einträge im Prompt mit @name ansprechen (Kling) bzw. werden automatisch als Referenz mitgeschickt (Seedance).</p>
+          <div id="video-elements-list"></div>
+        </section>
+
+        <section id="video-describe-section" class="field hidden">
+          <label class="field-label">Video-Prompt-Generator <span class="field-label-muted">(Claude)</span></label>
+          <p class="field-hint">Nutzt Start-/Endbild (falls gesetzt) und/oder eine eigene Idee, um eine Bewegungsbeschreibung zu formulieren.</p>
+          <textarea id="video-describe-idea" rows="3" placeholder="Eigene Idee (optional) — z.B. &quot;Kamera fährt langsam vor, Nebel zieht durchs Bild&quot;"></textarea>
+          <button id="video-describe-btn" type="button" class="describe-btn">Prompt erstellen</button>
+          <div id="video-describe-result" class="describe-result hidden">
+            <textarea id="video-describe-output" rows="4" readonly></textarea>
+            <div class="describe-actions">
+              <button type="button" id="video-describe-use">→ Video-Prompt</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="field">
+          <label class="field-label" for="video-prompt">Prompt — Bewegung</label>
+          <textarea id="video-prompt" rows="4" placeholder="Was passiert im Video? z.B. langsamer Kamerafahrt nach vorn, Figur dreht sich um..."></textarea>
+        </section>
+
+        <section class="field field-row">
+          <div>
+            <label class="field-label" for="video-aspect-ratio">Seitenverhältnis</label>
+            <select id="video-aspect-ratio"></select>
+          </div>
+          <div>
+            <label class="field-label" for="video-duration">Dauer</label>
+            <select id="video-duration"></select>
+          </div>
+        </section>
+
+        <label class="describe-checkbox"><input type="checkbox" id="video-generate-audio" /> Ton automatisch generieren (falls vom Modell unterstützt)</label>
+
+        <button id="video-generate-btn" class="generate-btn">
+          <span class="generate-btn-label">Video entwickeln</span>
+        </button>
+
+        <p id="video-generate-error" class="generate-error hidden"></p>
+
+      </div>
 
     </aside>
 

@@ -312,6 +312,128 @@ textarea { resize: vertical; line-height: 1.4; }
   color: var(--accent);
 }
 
+/* ---------- Modus-Tabs (Bild/Video) ---------- */
+
+.mode-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 14px;
+}
+
+.mode-tab {
+  flex: 1;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.mode-tab:hover { border-color: var(--accent); color: var(--accent); }
+.mode-tab.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+/* ---------- Bibliothek (Charaktere / Landschaften / Gegenstände) ---------- */
+
+.library-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.library-item {
+  position: relative;
+  width: 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.library-item-tile {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  cursor: pointer;
+}
+.library-item-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.library-item-tile:hover { border-color: var(--accent); }
+
+.library-item-name {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: center;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-item-remove {
+  position: absolute;
+  top: -4px; right: -4px;
+  width: 15px; height: 15px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.7);
+  color: var(--text);
+  border: none;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 2;
+}
+
+.library-add-tile {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius);
+  border: 1px dashed var(--border);
+  background: var(--panel);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-size: 20px;
+  cursor: pointer;
+}
+.library-add-tile:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---------- Video-Bild-Kacheln (Start-/Endbild fuers Video) ---------- */
+
+.video-frame-tile {
+  height: 70px;
+}
+.video-frame-tile img { width: 100%; height: 100%; object-fit: cover; }
+.video-frame-tile.filled { border-style: solid; cursor: default; }
+
+/* ---------- Video-Ergebniskarten ---------- */
+
+.video-card-media {
+  aspect-ratio: 16 / 9;
+  background: var(--panel-alt);
+  position: relative;
+  overflow: hidden;
+}
+.video-card-media video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  display: block;
+}
+
 /* ---------- Referenzbild-Kategorien (Personen / Stimmung / etc.) ---------- */
 
 .ref-category {
