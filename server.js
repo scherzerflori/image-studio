@@ -154,30 +154,26 @@ const MODELS = [
     },
   },
   {
-    // GPT Image 2.5 wurde von OpenAI erst am 8. September 2026 veroeffentlicht
-    // (Flare = schnell/Standard, Sunburst = Praezisions-Editing). Erster
-    // Versuch mit dem Modell-String "gpt-image-2.5-flare-text-to-image" kam
-    // von Kie.ai als "model not supported" zurueck. Zweiter Versuch: Schema
-    // wie bei GPT Image 1.5 (Schraegstrich vor der Versionsnummer statt
-    // Bindestrich), da GPT Image 2 (ohne Punkt) und GPT Image 1.5 (mit
-    // Punkt) bei Kie.ai unterschiedliche Schreibweisen haben. Falls das
-    // wieder fehlschlaegt: Modell-String direkt in Kie.ais eigenem
-    // Dashboard/Doku nachschlagen und hier eintragen.
+    // Bestaetigt von Florian direkt im Kie.ai-Dashboard (09/2026): Kie.ai
+    // schreibt den Punkt in "2.5" als Bindestrich, komplett im selben
+    // durchgehenden Bindestrich-Schema wie GPT Image 2. Image-to-Image ist
+    // damit belegt; Text-to-Image ist nach demselben Muster abgeleitet
+    // (noch nicht einzeln bestaetigt).
     key: 'gpt-image-2.5-flare',
     label: 'GPT Image 2.5 Flare',
     vendor: 'OpenAI',
-    blurb: 'Nachfolger von GPT Image 2 – spuerbar schneller bei gleichem Preis, Standardwahl fuer die meisten Bilder. (Sehr neues Modell, Stand 09/2026 – Modell-String noch experimentell.)',
+    blurb: 'Nachfolger von GPT Image 2 – spuerbar schneller bei gleichem Preis, Standardwahl fuer die meisten Bilder.',
     maxReferenceImages: 4,
     supportsResolution: false,
     buildInput(ctx) {
       if (ctx.referenceImageUrls.length > 0) {
         return {
-          model: 'gpt-image/2.5-flare-image-to-image',
+          model: 'gpt-image-2-5-flare-image-to-image',
           input: { prompt: ctx.prompt, input_urls: ctx.referenceImageUrls, aspect_ratio: ctx.aspectRatio, quality: 'high' },
         };
       }
       return {
-        model: 'gpt-image/2.5-flare-text-to-image',
+        model: 'gpt-image-2-5-flare-text-to-image',
         input: { prompt: ctx.prompt, aspect_ratio: ctx.aspectRatio, quality: 'high' },
       };
     },
@@ -186,18 +182,18 @@ const MODELS = [
     key: 'gpt-image-2.5-sunburst',
     label: 'GPT Image 2.5 Sunburst',
     vendor: 'OpenAI',
-    blurb: 'Praezisions-Variante fuer kontrollierte Bearbeitungen (z.B. "nur die Jacke aendern, Rest exakt beibehalten"), etwas langsamer als Flare. (Sehr neues Modell, Stand 09/2026 – Modell-String noch experimentell.)',
+    blurb: 'Praezisions-Variante fuer kontrollierte Bearbeitungen (z.B. "nur die Jacke aendern, Rest exakt beibehalten"), etwas langsamer als Flare.',
     maxReferenceImages: 4,
     supportsResolution: false,
     buildInput(ctx) {
       if (ctx.referenceImageUrls.length > 0) {
         return {
-          model: 'gpt-image/2.5-sunburst-image-to-image',
+          model: 'gpt-image-2-5-sunburst-image-to-image',
           input: { prompt: ctx.prompt, input_urls: ctx.referenceImageUrls, aspect_ratio: ctx.aspectRatio, quality: 'high' },
         };
       }
       return {
-        model: 'gpt-image/2.5-sunburst-text-to-image',
+        model: 'gpt-image-2-5-sunburst-text-to-image',
         input: { prompt: ctx.prompt, aspect_ratio: ctx.aspectRatio, quality: 'high' },
       };
     },
