@@ -180,6 +180,83 @@ function findModel(key) {
 }
 
 // ---------------------------------------------------------------------------
+// Video-Modell-Registry. Getrennt von der Bild-Registry, da Video-Modelle
+// andere Parameter brauchen (Dauer, Ton, Start-/Endbild statt Referenzbilder).
+// Quelle: docs.kie.ai (Bytedance Seedance 2.0 Fast, Kling 3.0), Stand
+// September 2026.
+// ---------------------------------------------------------------------------
+const VIDEO_ASPECT_RATIOS = [
+  { value: '16:9', label: 'Breitbild (16:9)' },
+  { value: '9:16', label: 'Hochformat (9:16)' },
+  { value: '1:1', label: 'Quadratisch (1:1)' },
+];
+
+const VIDEO_MODELS = [
+  {
+    key: 'seedance-2-fast',
+    label: 'Seedance 2.0 Fast',
+    vendor: 'ByteDance',
+    blurb: 'Sauberes Start- und Endbild als getrennte Parameter, bis 15s, optional Ton.',
+    supportsStartEnd: true,
+    supportsElements: false,
+    supportsAudio: true,
+    maxReferenceImages: 9,
+    durations: [5, 10, 15],
+    buildInput(ctx) {
+      const input = {
+        prompt: ctx.prompt,
+        aspect_ratio: ctx.aspectRatio,
+        resolution: '720p',
+        duration: ctx.duration,
+        generate_audio: !!ctx.generateAudio,
+      };
+      if (ctx.startImageUrl && ctx.endImageUrl) {
+        input.first_frame_url = ctx.startImageUrl;
+        input.last_frame_url = ctx.endImageUrl;
+      } else if (ctx.startImageUrl) {
+        input.first_frame_url = ctx.startImageUrl;
+      } else if (ctx.referenceImageUrls.length) {
+        input.reference_image_urls = ctx.referenceImageUrls;
+      }
+      return { model: 'bytedance/seedance-2-fast', input };
+    },
+  },
+  {
+    key: 'kling-3',
+    label: 'Kling 3.0',
+    vendor: 'Kuaishou',
+    blurb: 'Benannte Element-Referenzen für Charaktere/Objekte (im Prompt mit @name ansprechen), optional Ton.',
+    supportsStartEnd: false,
+    supportsElements: true,
+    supportsAudio: true,
+    maxReferenceImages: 1,
+    durations: [5, 10],
+    buildInput(ctx) {
+      const input = {
+        prompt: ctx.prompt,
+        aspect_ratio: ctx.aspectRatio,
+        duration: String(ctx.duration),
+        mode: 'std',
+        sound: !!ctx.generateAudio,
+      };
+      if (ctx.startImageUrl) input.image_urls = [ctx.startImageUrl];
+      if (ctx.elements.length) {
+        input.kling_elements = ctx.elements.map((el) => ({
+          name: el.name,
+          description: el.description || '',
+          element_input_urls: [el.url],
+        }));
+      }
+      return { model: 'kling-3.0/video', input };
+    },
+  },
+];
+
+function findVideoModel(key) {
+  return VIDEO_MODELS.find((m) => m.key === key);
+}
+
+// ---------------------------------------------------------------------------
 // Einfacher Passwortschutz (optional). Schuetzt nur die API-Routen, nicht die
 // statischen Dateien – im HTML/JS steht nichts Geheimes.
 // ---------------------------------------------------------------------------
@@ -211,6 +288,18 @@ app.get('/api/models', requireAccess, (req, res) => {
     resolutions: RESOLUTIONS,
     referenceCategories: REFERENCE_CATEGORIES,
     describeEnabled: !!ANTHROPIC_API_KEY,
+    videoModels: VIDEO_MODELS.map((m) => ({
+      key: m.key,
+      label: m.label,
+      vendor: m.vendor,
+      blurb: m.blurb,
+      supportsStartEnd: m.supportsStartEnd,
+      supportsElements: m.supportsElements,
+      supportsAudio: m.supportsAudio,
+      maxReferenceImages: m.maxReferenceImages,
+      durations: m.durations,
+    })),
+    videoAspectRatios: VIDEO_ASPECT_RATIOS,
   });
 });
 
@@ -311,6 +400,156 @@ app.post('/api/generate-pair', requireAccess, async (req, res) => {
   }
 });
 
+// Video generieren: Text-zu-Video, Start-/Endbild-zu-Video (Seedance), oder
+// mit benannten Element-Referenzen (Kling).
+app.post('/api/generate-video', requireAccess, async (req, res) => {
+  try {
+    const {
+      modelKey,
+      prompt,
+      aspectRatio,
+      duration,
+      generateAudio,
+      startImageUrl,
+      endImageUrl,
+      referenceImageUrls,
+      elements,
+    } = req.body || {};
+    const model = findVideoModel(modelKey);
+    if (!model) return res.status(400).json({ error: 'Unbekanntes Video-Modell.' });
+    if (!prompt || !prompt.trim()) return res.status(400).json({ error: 'Prompt fehlt.' });
+
+    const payload = model.buildInput({
+      prompt: prompt.trim(),
+      aspectRatio: aspectRatio || '16:9',
+      duration: duration || model.durations[0],
+      generateAudio,
+      startImageUrl: startImageUrl || null,
+      endImageUrl: endImageUrl || null,
+      referenceImageUrls: Array.isArray(referenceImageUrls) ? referenceImageUrls.slice(0, model.maxReferenceImages) : [],
+      elements: Array.isArray(elements) ? elements.slice(0, 4) : [],
+    });
+
+    const upstream = await fetch(`${KIE_BASE}/jobs/createTask`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${KIE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await upstream.json();
+    if (!upstream.ok || data.code !== 200) {
+      return res.status(upstream.status && upstream.status !== 200 ? upstream.status : 400).json({
+        error: data.msg || 'Kie.ai hat den Video-Task abgelehnt.',
+      });
+    }
+    res.json({ taskId: data.data.taskId, modelUsed: payload.model });
+  } catch (err) {
+    console.error('Generate-Video-Fehler:', err);
+    res.status(500).json({ error: 'Video-Generierung fehlgeschlagen (Server-Fehler).' });
+  }
+});
+
+// Video-Prompt generieren: Start-/Endbild (optional) plus eigene Idee, Claude
+// beschreibt daraus eine Bewegung statt nur ein Standbild.
+app.post('/api/generate-video-prompt', requireAccess, async (req, res) => {
+  try {
+    if (!ANTHROPIC_API_KEY) {
+      return res.status(500).json({ error: 'ANTHROPIC_API_KEY ist auf dem Server nicht gesetzt.' });
+    }
+    const { startImage, endImage, ideaText, styleHint, duration } = req.body || {};
+
+    async function toBase64DataUrl(image) {
+      if (!image) return null;
+      if (image.startsWith('data:')) return image;
+      const resp = await fetch(image);
+      if (!resp.ok) return null;
+      const buf = await resp.arrayBuffer();
+      const contentType = (resp.headers.get('content-type') || 'image/png').split(';')[0];
+      const SUPPORTED = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      const mediaType = SUPPORTED.includes(contentType) ? contentType : 'image/png';
+      return `data:${mediaType};base64,${Buffer.from(buf).toString('base64')}`;
+    }
+
+    const startImageBase64 = await toBase64DataUrl(startImage);
+    const endImageBase64 = await toBase64DataUrl(endImage);
+    const hasStart = !!startImageBase64;
+    const hasEnd = !!endImageBase64;
+    const hasIdea = !!(ideaText && ideaText.trim());
+    if (!hasStart && !hasEnd && !hasIdea) {
+      return res.status(400).json({ error: 'Bitte mindestens ein Bild oder eine Idee angeben.' });
+    }
+
+    const styleLine = styleHint && styleHint.trim()
+      ? styleHint.trim()
+      : 'düster-mystische Lichtstimmung, cineastisch, extrem realistische Bewegungen';
+    const durationLine = duration
+      ? ` Der Clip ist etwa ${duration} Sekunden lang – die beschriebene Bewegung muss in dieser Zeit plausibel ablaufen, nicht zu viel hineinpacken.`
+      : '';
+
+    let task;
+    if (hasStart && hasEnd) {
+      task = 'Das erste Bild zeigt den Anfang des Videos, das zweite Bild das Ende. Beschreibe die Kamerabewegung und Handlung, die glaubhaft von Anfang zu Ende führt.';
+    } else if (hasStart) {
+      task = 'Das Bild zeigt den Startpunkt des Videos. Beschreibe, welche Bewegung/Handlung von hier ausgehend passiert.';
+    } else {
+      task = 'Es gibt noch kein Bild, nur eine Idee. Formuliere daraus eine konkrete Bewegungsbeschreibung für ein KI-Video.';
+    }
+
+    const systemPrompt =
+      'Du bist ein erfahrener Prompt-Autor fuer KI-Videogenerierung (u.a. Seedance, Kling). ' +
+      task + ' ' +
+      'Der fertige Prompt ist englischsprachig, knapp und stichpunktartig (kurze Phrasen statt Fliesstext), ' +
+      'beschreibt konkrete BEWEGUNG ueber Zeit (Kamera, Figuren, Umgebung), nicht nur ein Standbild.' +
+      durationLine +
+      ` Gewuenschter Stil: ${styleLine}. ` +
+      'Antworte NUR mit dem fertigen Prompt-Text, ohne Einleitung, ohne Anfuehrungszeichen, ohne Markdown-Formatierung.';
+
+    const content = [];
+    if (hasStart) {
+      const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(startImageBase64);
+      if (m) content.push({ type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } });
+    }
+    if (hasEnd) {
+      const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(endImageBase64);
+      if (m) content.push({ type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } });
+    }
+    content.push({
+      type: 'text',
+      text: hasIdea ? `Idee/Anweisung: ${ideaText.trim()}` : 'Beschreibe die Bewegung für dieses Video.',
+    });
+
+    const upstream = await fetch(ANTHROPIC_BASE, {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 500,
+        system: systemPrompt,
+        messages: [{ role: 'user', content }],
+      }),
+    });
+    const data = await upstream.json();
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ error: data.error?.message || 'Claude-Anfrage fehlgeschlagen.' });
+    }
+    const text = (data.content || [])
+      .filter((block) => block.type === 'text')
+      .map((block) => block.text)
+      .join('\n')
+      .trim();
+    res.json({ prompt: text });
+  } catch (err) {
+    console.error('Generate-Video-Prompt-Fehler:', err);
+    res.status(500).json({ error: 'Video-Prompt-Erstellung fehlgeschlagen (Server-Fehler).' });
+  }
+});
+
 // Prompt generieren: aus einem hochgeladenen Bild, aus einer frei
 // eingetippten Idee, oder aus beidem zusammen.
 app.post('/api/generate-prompt', requireAccess, async (req, res) => {
@@ -349,8 +588,11 @@ app.post('/api/generate-prompt', requireAccess, async (req, res) => {
     const systemPrompt =
       'Du bist ein erfahrener Prompt-Autor fuer KI-Bildgenerierung (u.a. Nano Banana Pro, Flux-2, GPT Image 2). ' +
       task + ' ' +
-      'Der fertige Prompt ist englischsprachig, sehr detailliert: Komposition, Personen (Ausdruck, Kleidung, Haltung), ' +
-      'Hintergrund/Umgebung, Licht und Kamera/Objektiv-Look. ' +
+      'Der fertige Prompt ist englischsprachig, aber bewusst KNAPP und STICHPUNKTARTIG formuliert: kurze, ' +
+      'praegnante Phrasen statt ausschweifender Fliesstext-Saetze, durch Kommas getrennt (Tag-Stil, keine ' +
+      'vollstaendigen Saetze mit "the/a/is"). Deckt trotzdem alles Wesentliche ab: Komposition, Personen ' +
+      '(Ausdruck, Kleidung, Haltung), Hintergrund/Umgebung, Licht, Kamera/Objektiv-Look. Lieber ein knappes, ' +
+      'praezises Schlagwort als ein ausschweifender Nebensatz. ' +
       `Gewuenschter Stil: ${styleLine}.` +
       blockLine +
       novelLine +

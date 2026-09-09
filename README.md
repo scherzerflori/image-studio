@@ -16,6 +16,78 @@ vermutlich zusätzlich an CORS scheitern. Der Server in diesem Projekt ist
 daher ein dünner Proxy: Er nimmt Anfragen vom Browser entgegen, hängt den
 Key aus einer Umgebungsvariable an und leitet an `api.kie.ai` weiter.
 
+## Neu: Bibliothek, Video-Bereich (Seedance/Kling), Verbindung beider Welten
+
+Das ist der größte Umbau bisher, in drei Etappen — alle in dieser Version enthalten.
+
+### Etappe 1 — Bibliothek (Charaktere, Landschaften/Hintergründe, Gegenstände)
+
+Oben in der Seitenleiste, unter "Projekt". Drei Kategorien, jede mit
+dauerhaft gespeicherten Einträgen (Bild + Name + optionaler Beschreibungstext,
+`localStorage`, wie Projekte/Verlauf):
+
+- **"+"** lädt ein Bild hoch und fragt nach einem Namen.
+- **"✎ Beschreiben"** lässt Claude aus dem Bild eine wiederverwendbare
+  Beschreibung schreiben (nur sichtbar, wenn `ANTHROPIC_API_KEY` gesetzt ist).
+- **Klick auf den Eintrag** ("→ Verwenden"-Prinzip): Bild wandert in den
+  nächsten freien, passenden Referenz-Platz (Charakter → Person,
+  Landschaft → Hintergrund, Gegenstand → Gegenstand) und die Beschreibung
+  wird in den zuletzt aktiven Prompt eingefügt — ein Klick für beides.
+
+### Etappe 2 — Video-Bereich
+
+Neuer Tab "🎬 Video" neben "🖼 Bild" oben in der Seitenleiste (Projekt und
+Bibliothek bleiben in beiden Tabs sichtbar). Zwei Modelle:
+
+| Modell | Anbieter | Stärke |
+|---|---|---|
+| Seedance 2.0 Fast | ByteDance | Sauberes Start-/Endbild als getrennte Parameter, bis 15s, optional Ton |
+| Kling 3.0 | Kuaishou | Benannte Element-Referenzen (`@name` im Prompt), optional Ton |
+
+- **Start-/Endbild:** Entweder direkt hochladen, oder auf jedem fertigen
+  Bild im Ergebnisbereich "🎬 Video…" → "als Video-Startbild"/"…-Endbild"
+  wählen — damit sind die Bild- und Video-Erzeugung verbunden, genau wie
+  gewünscht.
+- **Video-Prompt-Generator (Claude):** Wie bei Bildern, aber auf Bewegung
+  ausgelegt — nutzt Start-/Endbild (falls gesetzt) und/oder eine eigene
+  Idee, berücksichtigt die gewählte Dauer, damit die Bewegung zeitlich
+  plausibel bleibt.
+- Ergebnisse erscheinen als eigene Karten im selben Ergebnisbereich wie
+  Bilder (mit 🎬-Kennzeichnung), mit Video-Player, "★ behalten", Download
+  (gleiche Namenskonvention wie Bilder, endet aber auf `.mp4`) und
+  "⎘ Prompt". "KI-Check" und "als Referenz verwenden" gibt es hier bewusst
+  nicht (nicht sinnvoll übertragbar auf Video).
+
+### Etappe 3 — Bibliothek in der Video-Erzeugung
+
+Bei Kling 3.0 erscheint im Video-Tab ein Block "Elemente aus Bibliothek" —
+Charaktere/Gegenstände aus der Bibliothek lassen sich als Kontrollkästchen
+aktivieren und werden automatisch als benannte `kling_elements` mitgeschickt;
+im Prompt mit `@name` ansprechen (der Name wird dabei automatisch in ein
+technisches Kürzel umgewandelt, z. B. "Anna" → `@anna`). Bei Seedance
+landet ein aktiviertes Startbild automatisch als `first_frame_url`.
+
+### Bekannte Lücken in dieser ersten Video-Version
+
+- Kein eigener Video-Auflösungsregler (Seedance läuft fest auf 720p, Kling
+  auf Standard-Qualität) — bei Bedarf in `server.js` (`VIDEO_MODELS`)
+  nachrüstbar.
+- Seedances "reine Referenzbilder ohne Start-/Endbild"-Modus ist technisch
+  im Server vorbereitet, aber im Interface noch nicht verdrahtet (Start-
+  /Endbild deckt den Hauptanwendungsfall ab).
+- Kein editierbares Dateiname-Stichwort bei Videos (bei Bildern schon) —
+  wird automatisch aus dem Prompt abgeleitet.
+- Video-Generierung dauert je nach Modell/Länge deutlich länger als Bilder
+  (oft mehrere Minuten) und kostet spürbar mehr Kie.ai-Guthaben pro
+  Versuch — vor größeren Testreihen einen Blick ins Kie.ai-Guthaben werfen.
+
+## Neu: Claude formuliert jetzt knapper und stichpunktartiger
+
+Sowohl der Bild- als auch der Video-Prompt-Generator bitten Claude jetzt
+ausdrücklich um kurze, komma-getrennte Phrasen statt ausschweifendem
+Fließtext (Tag-Stil) — deckt weiterhin Komposition, Personen, Hintergrund,
+Licht und Kamera ab, aber knapper formuliert.
+
 ## Neu: KI-Check ("zusätzliche Hand" & Co. automatisch erkennen)
 
 Jedes fertige Bild hat einen **"🔍 KI-Check"**-Button (nur sichtbar, wenn
