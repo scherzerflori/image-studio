@@ -16,6 +16,25 @@ vermutlich zusätzlich an CORS scheitern. Der Server in diesem Projekt ist
 daher ein dünner Proxy: Er nimmt Anfragen vom Browser entgegen, hängt den
 Key aus einer Umgebungsvariable an und leitet an `api.kie.ai` weiter.
 
+## GPT Image 2.5 ist da (bestätigt funktionierend)
+
+Nach zwei falschen Rateversuchen hat sich das Kie.ai-Schema geklärt: der
+Punkt in "2.5" wird als Bindestrich geschrieben, komplett im selben
+durchgehenden Bindestrich-Stil wie GPT Image 2. Ersetzt jetzt GPT Image 2
+in der Modell-Auswahl:
+
+- **GPT Image 2.5 Flare** (`gpt-image-2-5-flare-text-to-image` /
+  `-image-to-image`) — Standardwahl, schneller als GPT Image 2 bei
+  gleichem Preis.
+- **GPT Image 2.5 Sunburst** (`gpt-image-2-5-sunburst-text-to-image` /
+  `-image-to-image`) — Präzisions-Variante für kontrollierte Bearbeitungen.
+
+Die Bild-zu-Bild-Variante beider Modelle ist direkt im Kie.ai-Dashboard
+bestätigt. Die Text-zu-Bild-Variante ist nach demselben, jetzt belegten
+Muster abgeleitet, aber noch nicht einzeln gegengetestet — falls die beim
+reinen Text-Prompt (ohne Referenzbild) einen Fehler wirft, ist das wie
+gehabt eine Ein-Zeilen-Korrektur in `server.js`.
+
 ## Neu: Bibliothek, Video-Bereich (Seedance/Kling), Verbindung beider Welten
 
 Das ist der größte Umbau bisher, in drei Etappen — alle in dieser Version enthalten.
