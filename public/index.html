@@ -40,24 +40,6 @@
     <!-- Linke Spalte: Steuerung -->
     <aside class="darkroom">
 
-      <section class="field project-section">
-        <label class="field-label">Projekt</label>
-        <select id="project-select"></select>
-        <label class="field-label" for="project-style">Stil / Grundstimmung</label>
-        <textarea id="project-style" rows="3" placeholder="z.B. cineastisch, mystisch-düstere Lichtstimmung, extrem realistische Gesichter, keine glatte KI-Optik…"></textarea>
-        <div class="project-actions">
-          <button id="project-save" type="button">Speichern</button>
-          <button id="project-delete" type="button" class="project-delete hidden">Löschen</button>
-        </div>
-        <p class="field-hint">Wird jedem Prompt automatisch vorangestellt und als Stilvorgabe für "Prompt aus Referenzbild" genutzt. Nur lokal in diesem Browser gespeichert.</p>
-      </section>
-
-      <section class="field">
-        <label class="field-label">Bibliothek <span class="field-label-muted">(Charaktere, Landschaften, Gegenstände)</span></label>
-        <p class="field-hint">Dauerhaft gespeichert. "→ Verwenden" belegt automatisch den passenden Referenz-Platz (Bild) und trägt die Beschreibung in den zuletzt aktiven Prompt ein.</p>
-        <div id="library-sections"></div>
-      </section>
-
       <div class="mode-tabs">
         <button type="button" class="mode-tab active" id="mode-tab-image">🖼 Bild</button>
         <button type="button" class="mode-tab" id="mode-tab-video">🎬 Video</button>
@@ -87,8 +69,6 @@
           <img id="describe-tile-img" class="hidden" alt="" />
         </div>
         <textarea id="describe-idea" rows="3" placeholder="Eigene Idee (optional, auch auf Deutsch/stichwortartig) — z.B. &quot;Wirtin schaut misstrauisch aus dem Fenster, Gewitter zieht auf&quot;"></textarea>
-        <label class="describe-checkbox"><input type="checkbox" id="describe-use-blocks" /> Aktuelle Bildsprache-Auswahl einbeziehen (Kamera/Objektiv/Kniff/Stil)</label>
-        <label class="describe-checkbox"><input type="checkbox" id="describe-novel-angle" /> 🎲 Besondere, noch nie gesehene Perspektive vorschlagen lassen</label>
         <button id="describe-btn" type="button" class="describe-btn" disabled>Prompt erstellen</button>
         <div id="describe-result" class="describe-result hidden">
           <textarea id="describe-output" rows="5" readonly></textarea>
@@ -98,12 +78,6 @@
             <select id="describe-as-ref"></select>
           </div>
         </div>
-      </section>
-
-      <section class="field">
-        <label class="field-label">Bildsprache <span class="field-label-muted">(Kamera, Objektiv, Stil)</span></label>
-        <p class="field-hint">Auswählen, optional eigenes Vorschaubild erzeugen, dann "→ Einfügen" — landet im zuletzt angeklickten Prompt-Feld (Start oder Ende).</p>
-        <div id="style-sections"></div>
       </section>
 
       <section class="field">
@@ -160,12 +134,6 @@
           </div>
         </section>
         <p class="field-hint">Auf jedem fertigen Bild im Ergebnisbereich gibt es "🎬 Video…" — damit landet es direkt hier als Start- oder Endbild.</p>
-
-        <section id="video-elements-section" class="field hidden">
-          <label class="field-label">Elemente aus Bibliothek <span class="field-label-muted">(Charaktere/Gegenstände)</span></label>
-          <p class="field-hint">Ausgewählte Einträge im Prompt mit @name ansprechen (Kling) bzw. werden automatisch als Referenz mitgeschickt (Seedance).</p>
-          <div id="video-elements-list"></div>
-        </section>
 
         <section id="video-describe-section" class="field hidden">
           <label class="field-label">Video-Prompt-Generator <span class="field-label-muted">(Claude)</span></label>

@@ -154,15 +154,11 @@ document.addEventListener('DOMContentLoaded', () => {
   wireLogin();
   wireGenerate();
   wireRefClearAll();
-  wireProjects();
   wireDescribe();
   wireKeepFilter();
   wirePromptFocusTracking();
   wireModeTabs();
-  wireLibrary();
   wireVideoPanel();
-  renderStyleSections();
-  renderLibrarySections();
   sharedFileInput.addEventListener('change', handleSharedFileChange);
   boot();
 });
@@ -199,7 +195,6 @@ async function loadModels() {
     populateResolutions();
     renderReferenceSections();
     updateRefStatus();
-    populateProjectSelect();
     populateVideoModelSelect();
     populateVideoAspectRatios();
     return true;
@@ -585,7 +580,8 @@ function wireProjects() {
 }
 
 function getProjectStyleText() {
-  return $('#project-style').value.trim();
+  const el = $('#project-style');
+  return el ? el.value.trim() : '';
 }
 
 // ---------------------------------------------------------------------------
@@ -628,8 +624,10 @@ function wireDescribe() {
     btn.disabled = true;
     btn.textContent = 'wird erstellt …';
     try {
-      const useBlocks = $('#describe-use-blocks').checked;
+      const useBlocksEl = $('#describe-use-blocks');
+      const useBlocks = useBlocksEl ? useBlocksEl.checked : false;
       const buildingBlocks = useBlocks ? getCurrentStyleSelections() : [];
+      const novelEl = $('#describe-novel-angle');
       const res = await fetch('/api/generate-prompt', {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -638,7 +636,7 @@ function wireDescribe() {
           ideaText: $('#describe-idea').value,
           styleHint: getProjectStyleText(),
           buildingBlocks,
-          wantsNovelPerspective: $('#describe-novel-angle').checked,
+          wantsNovelPerspective: novelEl ? novelEl.checked : false,
         }),
       });
       const data = await res.json();
@@ -1152,7 +1150,8 @@ function applyVideoModel(model) {
   currentVideoModel = model;
   $('#video-model-blurb').textContent = model.blurb;
   $('#video-end-wrap').classList.toggle('hidden', !model.supportsStartEnd);
-  $('#video-elements-section').classList.toggle('hidden', !model.supportsElements);
+  const elSection = $('#video-elements-section');
+  if (elSection) elSection.classList.toggle('hidden', !model.supportsElements);
   $('#video-generate-audio').closest('label').classList.toggle('hidden', !model.supportsAudio);
 
   const durSel = $('#video-duration');
@@ -1308,7 +1307,9 @@ function slugifyElementName(name) {
 function getSelectedVideoElements() {
   const lib = readLibrary();
   const out = [];
-  $('#video-elements-list').querySelectorAll('input[type=checkbox]:checked').forEach((cb) => {
+  const listEl = $('#video-elements-list');
+  if (!listEl) return out;
+  listEl.querySelectorAll('input[type=checkbox]:checked').forEach((cb) => {
     const [catKey, id] = cb.value.split(':');
     const entry = (lib[catKey] || []).find((e) => e.id === id);
     if (entry && entry.url) {
@@ -2120,7 +2121,7 @@ async function createVariant(baseUrl, instructionText) {
         promptStart: text,
         aspectRatio,
         resolution,
-        references: [{ category: 'background', name: '', url: baseUrl }],
+        references: [{ category: 'subject', name: '', url: baseUrl }],
         stylePrefix: getProjectStyleText(),
       }),
     });
@@ -2249,7 +2250,14 @@ function makeHistoryEntry(promptStart, promptEnd, aspectRatio) {
 const MODEL_FILE_SLUGS = {
   'nano-banana-pro': 'NanoBanana',
   'flux-2-pro': 'Flux2',
-  'gpt-image-2': 'GPTImage2',
+  'gpt-image-2.5-flare': 'GPTImage25Flare',
+  'gpt-image-2.5-sunburst': 'GPTImage25Sunburst',
+  'seedream-5-lite': 'Seedream5',
+  'ideogram-v3': 'IdeogramV3',
+  'grok-imagine': 'GrokImagine',
+  'imagen4': 'Imagen4',
+  'imagen4-ultra': 'Imagen4Ultra',
+  'qwen3': 'Qwen3',
 };
 
 const SLUG_STOPWORDS = new Set([
