@@ -1413,6 +1413,9 @@ function finishVideoDone(refs, url, entry) {
 
   refs.actions.classList.remove('hidden');
 
+  const quickRow = document.createElement('div');
+  quickRow.className = 'slot-quickrow';
+
   const keepBtn = document.createElement('button');
   keepBtn.className = 'slot-keep';
   keepBtn.type = 'button';
@@ -1428,7 +1431,7 @@ function finishVideoDone(refs, url, entry) {
     refs.card.classList.toggle('card-kept', entry.kept);
     applyKeepFilter();
   });
-  refs.actions.appendChild(keepBtn);
+  quickRow.appendChild(keepBtn);
   if (entry.kept) refs.card.classList.add('card-kept');
 
   const dl = document.createElement('button');
@@ -1460,7 +1463,7 @@ function finishVideoDone(refs, url, entry) {
       a.remove();
     }
   });
-  refs.actions.appendChild(dl);
+  quickRow.appendChild(dl);
 
   const copyBtn = document.createElement('button');
   copyBtn.className = 'slot-copy';
@@ -1475,7 +1478,9 @@ function finishVideoDone(refs, url, entry) {
     }
     setTimeout(() => (copyBtn.textContent = '⎘ Prompt'), 1500);
   });
-  refs.actions.appendChild(copyBtn);
+  quickRow.appendChild(copyBtn);
+
+  refs.actions.appendChild(quickRow);
 }
 
 function finishVideoError(refs, message) {
@@ -1491,7 +1496,8 @@ function buildVideoFileName(entry, url) {
   const project = sanitizeSlug(entry.projectName || 'OhneProjekt');
   const keyword = sanitizeSlug(entry.slug || deriveSlugFromPrompt(entry.prompt));
   const ratio = (entry.aspectRatio || '16:9').replace(/:/g, 'zu');
-  const model = entry.modelKey === 'kling-3' ? 'Kling3' : entry.modelKey === 'seedance-2-fast' ? 'Seedance2' : sanitizeSlug(entry.modelLabel || 'Video');
+  const VIDEO_MODEL_SLUGS = { 'kling-3': 'Kling3', 'seedance-2-fast': 'Seedance2', 'sora2': 'Sora2', 'wan-2-7': 'Wan27' };
+  const model = VIDEO_MODEL_SLUGS[entry.modelKey] || sanitizeSlug(entry.modelLabel || 'Video');
   const ext = guessExtension(url) === 'png' ? 'mp4' : guessExtension(url);
   return `${yy}${mm}${dd}_${project}_${keyword}_${ratio}_${model}.${ext}`;
 }
@@ -1731,6 +1737,10 @@ function finishSlotDone(slotRefs, url, entry, role) {
 
   slotRefs.actions.classList.remove('hidden');
 
+  // --- Quick-Reihe: behalten / herunterladen / Prompt kopieren -----------
+  const quickRow = document.createElement('div');
+  quickRow.className = 'slot-quickrow';
+
   if (entry && role) {
     const keepBtn = document.createElement('button');
     keepBtn.className = 'slot-keep';
@@ -1750,7 +1760,7 @@ function finishSlotDone(slotRefs, url, entry, role) {
       if (card) card.classList.toggle('card-kept', !!(entry.startKept || entry.endKept));
       applyKeepFilter();
     });
-    slotRefs.actions.appendChild(keepBtn);
+    quickRow.appendChild(keepBtn);
     const card0 = slotRefs.el.closest('.card');
     if (card0 && (entry.startKept || entry.endKept)) card0.classList.add('card-kept');
   }
@@ -1786,28 +1796,7 @@ function finishSlotDone(slotRefs, url, entry, role) {
       a.remove();
     }
   });
-  slotRefs.actions.appendChild(dl);
-
-  if (entry && role) {
-    const slugWrap = document.createElement('div');
-    slugWrap.className = 'slot-slug-wrap';
-    const slugLabel = document.createElement('span');
-    slugLabel.className = 'slot-slug-label';
-    slugLabel.textContent = 'Datei:';
-    const slugInput = document.createElement('input');
-    slugInput.type = 'text';
-    slugInput.className = 'slot-slug-input';
-    slugInput.value = (role === 'start' ? entry.startSlug : entry.endSlug) || deriveSlugFromPrompt(role === 'start' ? entry.promptStart : entry.promptEnd);
-    slugInput.title = 'Stichwort im Dateinamen – frei editierbar';
-    slugInput.addEventListener('input', () => {
-      if (role === 'start') entry.startSlug = slugInput.value;
-      else entry.endSlug = slugInput.value;
-    });
-    slugInput.addEventListener('blur', () => upsertHistory(entry));
-    slugWrap.appendChild(slugLabel);
-    slugWrap.appendChild(slugInput);
-    slotRefs.el.appendChild(slugWrap);
-  }
+  quickRow.appendChild(dl);
 
   if (entry && role) {
     const copyBtn = document.createElement('button');
@@ -1827,9 +1816,34 @@ function finishSlotDone(slotRefs, url, entry, role) {
         copyBtn.textContent = '⎘ Prompt';
       }, 1500);
     });
-    slotRefs.actions.appendChild(copyBtn);
+    quickRow.appendChild(copyBtn);
   }
 
+  slotRefs.actions.appendChild(quickRow);
+
+  // --- Datei-Stichwort, eigene Zeile --------------------------------------
+  if (entry && role) {
+    const slugWrap = document.createElement('div');
+    slugWrap.className = 'slot-slug-wrap';
+    const slugLabel = document.createElement('span');
+    slugLabel.className = 'slot-slug-label';
+    slugLabel.textContent = 'Datei:';
+    const slugInput = document.createElement('input');
+    slugInput.type = 'text';
+    slugInput.className = 'slot-slug-input';
+    slugInput.value = (role === 'start' ? entry.startSlug : entry.endSlug) || deriveSlugFromPrompt(role === 'start' ? entry.promptStart : entry.promptEnd);
+    slugInput.title = 'Stichwort im Dateinamen – frei editierbar';
+    slugInput.addEventListener('input', () => {
+      if (role === 'start') entry.startSlug = slugInput.value;
+      else entry.endSlug = slugInput.value;
+    });
+    slugInput.addEventListener('blur', () => upsertHistory(entry));
+    slugWrap.appendChild(slugLabel);
+    slugWrap.appendChild(slugInput);
+    slotRefs.actions.appendChild(slugWrap);
+  }
+
+  // --- als Referenz verwenden, eigene Zeile -------------------------------
   const select = document.createElement('select');
   select.className = 'slot-use-ref';
   populateUseRefSelect(select);
@@ -1846,6 +1860,7 @@ function finishSlotDone(slotRefs, url, entry, role) {
   });
   slotRefs.actions.appendChild(select);
 
+  // --- als Video-Start/-Endbild, eigene Zeile -----------------------------
   const videoSelect = document.createElement('select');
   videoSelect.className = 'slot-use-ref';
   videoSelect.innerHTML = '<option value="">🎬 Video…</option><option value="vstart">als Video-Startbild</option><option value="vend">als Video-Endbild</option>';
@@ -1856,6 +1871,7 @@ function finishSlotDone(slotRefs, url, entry, role) {
   });
   slotRefs.actions.appendChild(videoSelect);
 
+  // --- KI-Check, eigene Zeile + Ergebnis darunter -------------------------
   if (entry && role && DESCRIBE_ENABLED) {
     const checkBtn = document.createElement('button');
     checkBtn.className = 'slot-check-btn';
@@ -1906,9 +1922,10 @@ function finishSlotDone(slotRefs, url, entry, role) {
     });
 
     slotRefs.actions.appendChild(checkBtn);
-    slotRefs.el.appendChild(checkResultEl);
+    slotRefs.actions.appendChild(checkResultEl);
   }
 
+  // --- Variieren, eigene Zeile + Formular darunter ------------------------
   const variantBtn = document.createElement('button');
   variantBtn.className = 'slot-variant-btn';
   variantBtn.type = 'button';
@@ -1925,7 +1942,7 @@ function finishSlotDone(slotRefs, url, entry, role) {
   variantSubmit.textContent = 'Los';
   variantForm.appendChild(variantInput);
   variantForm.appendChild(variantSubmit);
-  slotRefs.el.appendChild(variantForm);
+  slotRefs.actions.appendChild(variantForm);
 
   variantBtn.addEventListener('click', () => {
     variantForm.classList.toggle('hidden');

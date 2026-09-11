@@ -702,53 +702,48 @@ textarea { resize: vertical; line-height: 1.4; }
 
 .slot-actions {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 6px;
-  padding: 6px 8px;
+  padding: 8px;
 }
 
-.slot-keep {
+.slot-quickrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.slot-quickrow > * { flex: 1; text-align: center; }
+
+.slot-keep,
+.slot-copy,
+.slot-check-btn,
+.slot-variant-btn {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-dim);
   border-radius: var(--radius);
-  padding: 3px 6px;
+  padding: 5px 7px;
   font-size: 11px;
   cursor: pointer;
 }
-.slot-keep:hover { border-color: var(--accent); color: var(--accent); }
+.slot-keep:hover,
+.slot-copy:hover,
+.slot-check-btn:hover:not(:disabled),
+.slot-variant-btn:hover { border-color: var(--accent); color: var(--accent); }
 .slot-keep.kept {
   background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent-strong);
 }
-
-.slot-copy {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  border-radius: var(--radius);
-  padding: 3px 6px;
-  font-size: 11px;
-  cursor: pointer;
-}
-.slot-copy:hover { border-color: var(--accent); color: var(--accent); }
-
-.slot-check-btn {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  border-radius: var(--radius);
-  padding: 3px 6px;
-  font-size: 11px;
-  cursor: pointer;
-}
-.slot-check-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .slot-check-btn:disabled { color: var(--text-faint); cursor: not-allowed; }
 
+.slot-check-btn,
+.slot-variant-btn {
+  width: 100%;
+  text-align: left;
+}
+
 .slot-check-result {
-  margin: 0 8px 8px;
   padding: 6px 8px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
@@ -782,7 +777,6 @@ textarea { resize: vertical; line-height: 1.4; }
 .slot-variant-form {
   display: flex;
   gap: 6px;
-  padding: 0 8px 8px;
 }
 .slot-variant-form input {
   flex: 1;
@@ -808,21 +802,22 @@ textarea { resize: vertical; line-height: 1.4; }
 
 .slot-download {
   background: transparent;
-  border: none;
+  border: 1px solid var(--border);
   color: var(--accent);
-  text-decoration: none;
   font-family: var(--mono);
   font-size: 11px;
-  padding: 0;
+  padding: 5px 7px;
+  border-radius: var(--radius);
   cursor: pointer;
+  flex: 1;
+  text-align: center;
 }
-.slot-download:hover { color: var(--accent-strong); }
+.slot-download:hover { border-color: var(--accent); color: var(--accent-strong); }
 
 .slot-slug-wrap {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 0 8px 8px;
 }
 .slot-slug-label {
   font-family: var(--mono);
@@ -844,12 +839,12 @@ textarea { resize: vertical; line-height: 1.4; }
 .slot-slug-input:focus { color: var(--text); border-color: var(--accent); }
 
 .slot-use-ref {
-  font-size: 10.5px;
+  width: 100%;
+  font-size: 11px;
   background: var(--panel-alt);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 3px 4px;
-  max-width: 110px;
+  padding: 5px 6px;
 }
 
 .card-meta {
