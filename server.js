@@ -60,17 +60,15 @@ const RESOLUTIONS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Referenzbild-Kategorien. "hasName" steuert, ob im Interface ein Namensfeld
-// neben dem Bild erscheint (nur bei Personen). maxCount ist die Anzahl an
-// Plaetzen, die im Interface angeboten werden – unabhaengig vom technischen
-// Limit des jeweiligen Modells (das regelt maxReferenceImages pro Modell,
-// siehe unten).
+// Referenzbild-Kategorien. Bewusst einfach gehalten: zwei Eimer statt vier -
+// "was soll im Bild auftauchen" und "welchen Look/Stimmung soll es haben".
+// maxCount ist die Anzahl an Plaetzen im Interface, unabhaengig vom
+// technischen Limit des jeweiligen Modells (siehe maxReferenceImages je
+// Modell weiter unten).
 // ---------------------------------------------------------------------------
 const REFERENCE_CATEGORIES = [
-  { key: 'person', label: 'Person', maxCount: 4, hasName: true },
-  { key: 'mood', label: 'Stimmung', maxCount: 3, hasName: false },
-  { key: 'background', label: 'Hintergrund/Gebäude', maxCount: 3, hasName: false },
-  { key: 'object', label: 'Gegenstand/Fahrzeug', maxCount: 3, hasName: false },
+  { key: 'subject', label: 'Personen & Dinge', maxCount: 8, hasName: false },
+  { key: 'style', label: 'Stil & Look', maxCount: 4, hasName: false },
 ];
 
 function categoryLabel(key) {
@@ -87,12 +85,7 @@ function buildReferenceDescriptor(references) {
   const counters = {};
   const parts = references.map((ref, i) => {
     counters[ref.category] = (counters[ref.category] || 0) + 1;
-    let label;
-    if (ref.category === 'person' && ref.name && ref.name.trim()) {
-      label = `Person: ${ref.name.trim()}`;
-    } else {
-      label = `${categoryLabel(ref.category)} ${counters[ref.category]}`;
-    }
+    const label = `${categoryLabel(ref.category)} ${counters[ref.category]}`;
     return `${i + 1}) ${label}`;
   });
   return `Bildreferenzen in dieser Reihenfolge: ${parts.join(', ')}.`;
@@ -198,7 +191,163 @@ const MODELS = [
       };
     },
   },
+  {
+    key: 'seedream-5-lite',
+    label: 'Seedream 5.0 Lite',
+    vendor: 'ByteDance',
+    blurb: 'Hohe Detailtreue und gute Textdarstellung im Bild, bis zu 6 Referenzbilder.',
+    maxReferenceImages: 6,
+    supportsResolution: false,
+    buildInput(ctx) {
+      if (ctx.referenceImageUrls.length > 0) {
+        return {
+          model: 'seedream/5-lite-image-to-image',
+          input: {
+            prompt: ctx.prompt,
+            image_urls: ctx.referenceImageUrls,
+            aspect_ratio: ctx.aspectRatio,
+            quality: 'basic',
+            nsfw_checker: false,
+          },
+        };
+      }
+      return {
+        model: 'seedream/5-lite-text-to-image',
+        input: { prompt: ctx.prompt, aspect_ratio: ctx.aspectRatio, quality: 'basic', nsfw_checker: false },
+      };
+    },
+  },
+  {
+    key: 'ideogram-v3',
+    label: 'Ideogram V3',
+    vendor: 'Ideogram',
+    blurb: 'Spezialist fuer Typografie, Logos und Layouts – gut lesbarer Text im Bild.',
+    maxReferenceImages: 1,
+    supportsResolution: false,
+    buildInput(ctx) {
+      const image_size = ideogramSizeFromRatio(ctx.aspectRatio);
+      if (ctx.referenceImageUrls.length > 0) {
+        return {
+          model: 'ideogram/v3-remix',
+          input: {
+            prompt: ctx.prompt,
+            image_url: ctx.referenceImageUrls[0],
+            rendering_speed: 'BALANCED',
+            style: 'AUTO',
+            expand_prompt: true,
+            image_size,
+            num_images: '1',
+          },
+        };
+      }
+      return {
+        model: 'ideogram/v3-text-to-image',
+        input: {
+          prompt: ctx.prompt,
+          rendering_speed: 'BALANCED',
+          style: 'AUTO',
+          expand_prompt: true,
+          image_size,
+        },
+      };
+    },
+  },
+  {
+    key: 'grok-imagine',
+    label: 'Grok Imagine',
+    vendor: 'xAI',
+    blurb: 'Kraeftige, stilisierte Bilder mit hoher Prompt-Treue.',
+    maxReferenceImages: 1,
+    supportsResolution: false,
+    buildInput(ctx) {
+      if (ctx.referenceImageUrls.length > 0) {
+        return {
+          model: 'grok-imagine/image-to-image',
+          input: { prompt: ctx.prompt, image_urls: [ctx.referenceImageUrls[0]], nsfw_checker: false },
+        };
+      }
+      return {
+        model: 'grok-imagine/text-to-image',
+        input: { prompt: ctx.prompt, aspect_ratio: ctx.aspectRatio },
+      };
+    },
+  },
+  {
+    key: 'imagen4',
+    label: 'Google Imagen4',
+    vendor: 'Google',
+    blurb: 'Sehr sauberes, natuerliches Fotolook-Ergebnis. Reines Text-zu-Bild, keine Referenzbilder.',
+    maxReferenceImages: 0,
+    supportsResolution: false,
+    buildInput(ctx) {
+      return {
+        model: 'google/imagen4',
+        input: { prompt: ctx.prompt, negative_prompt: '', aspect_ratio: ctx.aspectRatio === 'auto' ? '1:1' : ctx.aspectRatio, seed: '' },
+      };
+    },
+  },
+  {
+    key: 'imagen4-ultra',
+    label: 'Google Imagen4 Ultra',
+    vendor: 'Google',
+    blurb: 'Wie Imagen4, aber hoechste Qualitaetsstufe – langsamer und teurer. Reines Text-zu-Bild, keine Referenzbilder.',
+    maxReferenceImages: 0,
+    supportsResolution: false,
+    buildInput(ctx) {
+      return {
+        model: 'google/imagen4-ultra',
+        input: { prompt: ctx.prompt, negative_prompt: '', aspect_ratio: ctx.aspectRatio === 'auto' ? '1:1' : ctx.aspectRatio, seed: '' },
+      };
+    },
+  },
+  {
+    key: 'qwen3',
+    label: 'Qwen3',
+    vendor: 'Alibaba',
+    blurb: 'Vielseitig, gut fuer asiatische Schriftzeichen/Text im Bild, bis zu 3 Referenzbilder.',
+    maxReferenceImages: 3,
+    supportsResolution: true,
+    buildInput(ctx) {
+      const resolution1K2K = ctx.resolution === '2K' ? '2K' : '1K';
+      if (ctx.referenceImageUrls.length > 0) {
+        return {
+          model: 'qwen3/image-to-image',
+          input: {
+            prompt: ctx.prompt,
+            image_urls: ctx.referenceImageUrls,
+            image_size: ctx.aspectRatio === 'auto' ? '1:1' : ctx.aspectRatio,
+            resolution: resolution1K2K,
+            output_format: 'png',
+          },
+        };
+      }
+      return {
+        model: 'qwen3/text-to-image',
+        input: {
+          prompt: ctx.prompt,
+          image_size: ctx.aspectRatio === 'auto' ? '1:1' : ctx.aspectRatio,
+          resolution: resolution1K2K,
+          output_format: 'png',
+        },
+      };
+    },
+  },
 ];
+
+// Ideogram nutzt statt aspect_ratio ein "image_size"-Enum. Beste bekannte
+// Zuordnung – falls Kie.ai das Enum aendert, hier anpassen.
+function ideogramSizeFromRatio(ratio) {
+  const map = {
+    auto: 'square_hd',
+    '1:1': 'square_hd',
+    '16:9': 'landscape_16_9',
+    '9:16': 'portrait_16_9',
+    '4:3': 'landscape_4_3',
+    '3:4': 'portrait_4_3',
+    '21:9': 'landscape_16_9',
+  };
+  return map[ratio] || 'square_hd';
+}
 
 function findModel(key) {
   return MODELS.find((m) => m.key === key);

@@ -16,6 +16,42 @@ vermutlich zusätzlich an CORS scheitern. Der Server in diesem Projekt ist
 daher ein dünner Proxy: Er nimmt Anfragen vom Browser entgegen, hängt den
 Key aus einer Umgebungsvariable an und leitet an `api.kie.ai` weiter.
 
+## Vereinfachung: Projekt, Bibliothek und Bildsprache raus, Referenzbilder auf zwei Eimer reduziert, 10 Modelle
+
+Die Oberfläche war zuletzt ziemlich vollgestopft — dieses Update baut sie
+bewusst wieder schlanker:
+
+- **Referenzbilder:** Statt vier Kategorien (Person/Stimmung/Hintergrund/
+  Gegenstand) gibt es jetzt nur noch zwei einfache Bereiche: **"Personen &
+  Dinge"** (alles, was im Bild auftauchen soll, bis zu 8 Bilder) und
+  **"Stil & Look"** (Stimmungs-/Look-Referenz, bis zu 4 Bilder). Keine
+  Namensfelder mehr, einfach Bild hochladen, fertig.
+- **Projekt, Bibliothek, Bildsprache** sind aus der Oberfläche verschwunden.
+  **Wichtig: nichts ist gelöscht** — falls du sie mal wieder brauchst,
+  liegen deine gespeicherten Projekte/Bibliothekseinträge/eigenen
+  Bildsprache-Bausteine weiterhin unverändert im Browser-Speicher, nur die
+  Bedienelemente dafür sind ausgeblendet. Sag Bescheid, falls du eins davon
+  zurückhaben willst.
+- **Prompt schreiben, Start-/Endbild, Prompt-Generator (Claude), Bild-/
+  Video-Umschaltung** funktionieren unverändert wie zuvor.
+- **Modell-Auswahl deutlich erweitert:** von 4 auf 10 Bildmodelle. Neu
+  dazugekommen, alle mit geprüften Parametern aus der Kie.ai-Doku:
+
+| Modell | Anbieter | Stärke |
+|---|---|---|
+| Seedream 5.0 Lite | ByteDance | Detailtreue, Textdarstellung im Bild |
+| Ideogram V3 | Ideogram | Typografie, Logos, Layouts |
+| Grok Imagine | xAI | Stilisiert, hohe Prompt-Treue |
+| Google Imagen4 | Google | Sehr sauberer, natürlicher Fotolook (nur Text-zu-Bild) |
+| Google Imagen4 Ultra | Google | Wie Imagen4, höchste Qualitätsstufe (nur Text-zu-Bild) |
+| Qwen3 | Alibaba | Vielseitig, gut für asiatische Schriftzeichen im Bild |
+
+  "Wirklich alle" Kie.ai-Modelle (es gibt noch etliche mehr, z. B. Wan,
+  Recraft, Z-Image, MiniMax) wären dutzende weitere Einträge, die ich nicht
+  ungeprüft ergänzen wollte, nachdem GPT Image 2.5 zwei falsche
+  Rateversuche gebraucht hat. Sag gern, welche konkreten dir noch fehlen,
+  dann prüfe ich die gezielt nach und trage sie nach.
+
 ## GPT Image 2.5 ist da (bestätigt funktionierend)
 
 Nach zwei falschen Rateversuchen hat sich das Kie.ai-Schema geklärt: der
