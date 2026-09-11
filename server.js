@@ -424,6 +424,52 @@ const VIDEO_MODELS = [
       return { model: 'kling-3.0/video', input };
     },
   },
+  {
+    key: 'sora2',
+    label: 'Sora 2',
+    vendor: 'OpenAI',
+    blurb: 'Ton/Dialog automatisch eingebaut, sehr realistische Bewegungsphysik.',
+    supportsStartEnd: false,
+    supportsElements: false,
+    supportsAudio: false, // Ton ist bei Sora2 immer automatisch dabei, kein eigener Schalter
+    maxReferenceImages: 1,
+    durations: [10],
+    buildInput(ctx) {
+      const aspect = ctx.aspectRatio === '9:16' ? 'portrait' : 'landscape';
+      const base = { prompt: ctx.prompt, aspect_ratio: aspect, n_frames: String(ctx.duration), remove_watermark: true };
+      if (ctx.startImageUrl) {
+        return { model: 'sora-2-image-to-video', input: { ...base, image_urls: [ctx.startImageUrl] } };
+      }
+      return { model: 'sora-2-text-to-video', input: base };
+    },
+  },
+  {
+    key: 'wan-2-7',
+    label: 'Wan 2.7',
+    vendor: 'Alibaba',
+    blurb: 'Sauberes Start- und Endbild wie Seedance. Braucht zwingend ein Startbild.',
+    supportsStartEnd: true,
+    supportsElements: false,
+    supportsAudio: false,
+    maxReferenceImages: 0,
+    requiresStartImage: true,
+    durations: [5],
+    buildInput(ctx) {
+      const input = {
+        prompt: ctx.prompt,
+        negative_prompt: '',
+        resolution: '1080p',
+        aspect_ratio: ctx.aspectRatio,
+        duration: ctx.duration,
+        prompt_extend: true,
+        watermark: false,
+        seed: 0,
+      };
+      if (ctx.startImageUrl) input.first_frame_url = ctx.startImageUrl;
+      if (ctx.endImageUrl) input.last_frame_url = ctx.endImageUrl;
+      return { model: 'wan/2-7-image-to-video', input };
+    },
+  },
 ];
 
 function findVideoModel(key) {
@@ -472,6 +518,7 @@ app.get('/api/models', requireAccess, (req, res) => {
       supportsAudio: m.supportsAudio,
       maxReferenceImages: m.maxReferenceImages,
       durations: m.durations,
+      requiresStartImage: !!m.requiresStartImage,
     })),
     videoAspectRatios: VIDEO_ASPECT_RATIOS,
   });
@@ -592,6 +639,9 @@ app.post('/api/generate-video', requireAccess, async (req, res) => {
     const model = findVideoModel(modelKey);
     if (!model) return res.status(400).json({ error: 'Unbekanntes Video-Modell.' });
     if (!prompt || !prompt.trim()) return res.status(400).json({ error: 'Prompt fehlt.' });
+    if (model.requiresStartImage && !startImageUrl) {
+      return res.status(400).json({ error: `${model.label} benötigt zwingend ein Startbild.` });
+    }
 
     const payload = model.buildInput({
       prompt: prompt.trim(),

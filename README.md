@@ -16,6 +16,25 @@ vermutlich zusätzlich an CORS scheitern. Der Server in diesem Projekt ist
 daher ein dünner Proxy: Er nimmt Anfragen vom Browser entgegen, hängt den
 Key aus einer Umgebungsvariable an und leitet an `api.kie.ai` weiter.
 
+## Mehr Video-Modelle, übersichtlichere Aktionsleiste unter den Bildern
+
+- **Video-Tab von 2 auf 4 Modelle erweitert:** dazugekommen sind **Sora 2**
+  (OpenAI, Ton/Dialog automatisch eingebaut) und **Wan 2.7** (Alibaba,
+  sauberes Start-/Endbild wie Seedance — braucht aber zwingend ein
+  Startbild, das prüft der Server und meldet sonst eine klare Fehlermeldung).
+  **Veo 3.1** habe ich bewusst ausgelassen: Kie.ai bietet es über eine
+  komplett andere, eigene Schnittstelle an (nicht den normalen
+  Job-Warteschlangen-Weg aller anderen Modelle), und die genaue
+  Status-Abfrage dafür ließ sich nicht zweifelsfrei bestätigen — nach der
+  GPT-2.5-Erfahrung wollte ich das nicht auf Verdacht einbauen. Bei Bedarf
+  kann ich das gezielt nachrecherchieren.
+- **Aktionsleiste unter jedem Bild neu sortiert:** Vorher quetschten sich
+  bis zu 7 Buttons/Auswahlfelder in eine schmale, umbrechende Zeile. Jetzt:
+  eine kompakte Reihe oben (★ behalten / ↓ Bild / ⎘ Prompt), darunter das
+  Datei-Stichwort-Feld, dann "als Referenz verwenden", "🎬 Video…",
+  "🔍 KI-Check" und "↻ Variieren" jeweils in einer eigenen, vollen Zeile.
+  Gilt genauso für Video-Ergebniskarten.
+
 ## Vereinfachung: Projekt, Bibliothek und Bildsprache raus, Referenzbilder auf zwei Eimer reduziert, 10 Modelle
 
 Die Oberfläche war zuletzt ziemlich vollgestopft — dieses Update baut sie
